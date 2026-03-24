@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi KKKS</title>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent !important;
+            min-height: auto;
+            padding: 0;
+            margin: 0;
+            width: 100%;
+            overflow-x: hidden;
+        }
+        *, *::before, *::after { max-width: 100%; }
+        .container { max-width: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; }
+        .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            border-radius: 12px; padding: 20px; margin-bottom: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        }
+        .header h1 { color: white; font-size: 22px; margin-bottom: 6px; }
+        .header p { color: rgba(255,255,255,0.85); margin: 4px 0; font-size: 13px; }
+        .message-box {
+            background: white; border-radius: 12px; padding: 15px;
+            margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none;
+        }
+        .message-box.success { border-left: 5px solid #10b981; background: #f0fdf4; }
+        .message-box.warning { border-left: 5px solid #f59e0b; background: #fffbeb; }
+        .message-box.show { display: block; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; width: 100%; }
+        .tabs { display: flex; border-bottom: 2px solid #e5e7eb; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab { flex: none; min-width: 100px; padding: 12px 10px; background: none; border: none; font-size: 13px; font-weight: 600; color: #666; cursor: pointer; transition: all 0.3s; white-space: nowrap; }
+        .tab:hover { background: #f3f4f6; }
+        .tab.active { color: #2563eb; border-bottom: 3px solid #2563eb; }
+        .tab-content { padding: 15px; overflow-x: hidden; }
+
+        /* ADMIN LOCK */
+        .admin-lock-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.97); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 40px; }
+        .lock-icon { font-size: 64px; margin-bottom: 20px; }
+        .lock-title { font-size: 24px; font-weight: 700; color: #1e40af; margin-bottom: 10px; }
+        .lock-desc { color: #6b7280; font-size: 14px; margin-bottom: 30px; text-align: center; }
+        .lock-input-wrap { display: flex; gap: 10px; width: 100%; max-width: 360px; }
+        .lock-input { flex: 1; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; letter-spacing: 4px; }
+        .lock-input:focus { outline: none; border-color: #2563eb; }
+        .lock-error { color: #ef4444; font-size: 14px; margin-top: 12px; display: none; }
+        .admin-badge { display: inline-flex; align-items: center; gap: 6px; background: #dbeafe; color: #1e40af; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-left: 10px; }
+        .logout-btn { background: none; border: none; color: #ef4444; font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: background 0.2s; }
+        .logout-btn:hover { background: #fee2e2; }
+
+        /* GOOGLE SHEETS CONFIG */
+        .gs-config-box { background: #f0f9ff; border: 2px solid #bae6fd; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .gs-config-box h3 { color: #0369a1; margin-bottom: 12px; font-size: 16px; }
+        .gs-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+        .gs-status.connected { background: #dcfce7; color: #166534; }
+        .gs-status.disconnected { background: #fee2e2; color: #991b1b; }
+        .gs-status.syncing { background: #fef3c7; color: #92400e; }
+
+        /* SCANNER */
+        .scanner-container { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); position: relative; overflow: hidden; width: 100%; }
+        .scanner-wrapper { position: relative; z-index: 1; }
+        #reader { max-width: 350px; width: 350px !important; margin: 0 auto; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 3px solid rgba(255,255,255,0.3); }
+        #reader > * { max-width: 100% !important; }
+        #reader video { width: 100% !important; }
+        .scanner-info { color: white; margin-top: 12px; font-size: 14px; text-align: center; font-weight: 600; }
+        .scanner-status { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px; backdrop-filter: blur(10px); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: blink 1.5s ease-in-out infinite; flex-shrink: 0; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes checkBounce { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .scan-grid { display: flex; flex-direction: column; gap: 15px; }
+
+        /* BUTTONS */
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(37,99,235,0.4); }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239,68,68,0.4); }
+        .btn-secondary { background: #6b7280; color: white; }
+        .btn-secondary:hover { background: #4b5563; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* MEMBER CARDS */
+        .member-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s; }
+        .member-card:hover { background: #f3f4f6; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .member-card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
+        .member-info h3 { color: #1f2937; font-size: 18px; margin-bottom: 5px; }
+        .member-info p { color: #6b7280; font-size: 14px; margin: 2px 0; }
+        .member-actions { display: flex; gap: 8px; }
+
+        /* INPUTS */
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; font-weight: 600; color: #374151; margin-bottom: 8px; }
+        .input-group input, .input-group select, .input-group textarea { width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; font-family: inherit; }
+        .input-group input:focus, .input-group select:focus, .input-group textarea:focus { outline: none; border-color: #2563eb; }
+
+        /* STATS */
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; padding: 15px; color: white; box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+        .stat-card h3 { font-size: 12px; opacity: 0.9; margin-bottom: 6px; }
+        .stat-card p { font-size: 26px; font-weight: bold; }
+
+        /* TABLE */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f9fafb; font-weight: 600; color: #374151; }
+        tr:hover { background: #f9fafb; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+
+        /* ATTENDANCE */
+        .attendance-list { max-height: 400px; overflow-y: auto; }
+        .attendance-item { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .attendance-info h4 { color: #1f2937; font-size: 16px; margin-bottom: 5px; }
+        .attendance-info p { color: #6b7280; font-size: 13px; }
+        .qr-display { text-align: center; padding: 20px; }
+        #qrcode { display: inline-block; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+        /* MODAL */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); overflow-y: auto; }
+        .modal-content { background: white; margin: 5% auto; padding: 30px; border-radius: 12px; max-width: 800px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: modalSlideIn 0.3s ease-out; }
+        @keyframes modalSlideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .close { color: #9ca3af; float: right; font-size: 28px; font-weight: bold; cursor: pointer; transition: color 0.3s; }
+        .close:hover { color: #1f2937; }
+
+        /* FILE INPUT */
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+        .file-input-wrapper input[type=file] { position: absolute; left: -9999px; }
+        .file-input-label { display: block; padding: 15px; background: #f3f4f6; border: 2px dashed #d1d5db; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s; }
+        .file-input-label:hover { background: #e5e7eb; border-color: #9ca3af; }
+        .hidden { display: none !important; }
+        .search-box { margin-bottom: 20px; }
+        .search-box input { width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+
+        /* PRINT */
+        .print-preview { background: white; padding: 40px; margin: 20px auto; max-width: 210mm; min-height: 297mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .print-header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #2563eb; padding-bottom: 20px; }
+        .print-header h1 { color: #1e40af; font-size: 24px; margin-bottom: 10px; }
+        .print-header p { color: #6b7280; font-size: 14px; }
+        .print-section { margin-bottom: 30px; }
+        .print-section h2 { color: #1f2937; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+        .info-grid { display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 20px; }
+        .info-label { font-weight: 600; color: #374151; }
+        .info-value { color: #6b7280; }
+        @media print {
+            body { background: white; padding: 0; }
+            .container, .header, .card, .tabs, .message-box { display: none !important; }
+            .modal { display: block !important; position: relative; background: white; }
+            .modal-content { box-shadow: none; margin: 0; padding: 0; }
+            .close, .btn { display: none !important; }
+            .print-preview { box-shadow: none; margin: 0; padding: 20mm; }
+        }
+
+        /* QR CODE DISPLAY */
+        .qr-code-display { background: #f9fafb; padding: 10px; border-radius: 8px; border: 1px solid #e5e7eb; font-family: monospace; font-size: 12px; color: #374151; word-break: break-all; }
+        .attendance-detail-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* ATM CARD */
+        .member-card-atm { width: 3.375in; height: 2.125in; background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%); border-radius: 12px; padding: 20px; color: white; position: relative; box-shadow: 0 8px 16px rgba(0,0,0,0.2); margin: 20px auto; overflow: hidden; }
+        .logo-upload-section { background: #f9fafb; border: 2px dashed #d1d5db; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 20px; }
+        .logo-preview { width: 150px; height: 150px; margin: 0 auto 20px; border: 2px solid #e5e7eb; border-radius: 50%; overflow: hidden; background: white; display: flex; align-items: center; justify-content: center; }
+        .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+        .logo-preview-text { color: #9ca3af; font-size: 14px; }
+
+        /* NOTIFICATIONS */
+        .custom-notification { position: fixed; top: 20px; right: 20px; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 20px 24px; max-width: 400px; z-index: 10000; animation: slideInRight 0.3s ease-out; border-left: 4px solid #2563eb; }
+        .custom-notification.success { border-left-color: #10b981; }
+        .custom-notification.error { border-left-color: #ef4444; }
+        .custom-notification.warning { border-left-color: #f59e0b; }
+        .custom-notification-title { font-weight: 700; font-size: 16px; color: #1f2937; margin-bottom: 8px; }
+        .custom-notification-message { font-size: 14px; color: #6b7280; line-height: 1.5; }
+        @keyframes slideInRight { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .modal-dialog-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10001; animation: fadeIn 0.2s; }
+        .modal-dialog-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 400px; max-width: 500px; z-index: 10002; animation: scaleIn 0.3s ease-out; }
+        .modal-dialog-header { padding: 20px 24px; border-bottom: 1px solid #e5e7eb; }
+        .modal-dialog-title { font-size: 18px; font-weight: 700; color: #1f2937; margin: 0; }
+        .modal-dialog-content { padding: 24px; color: #6b7280; font-size: 14px; line-height: 1.6; }
+        .modal-dialog-footer { padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 10px; }
+        @keyframes scaleIn { from { transform: translate(-50%, -50%) scale(0.9); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        .status-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; user-select: none; }
+        .status-badge.hadir { background: #d1fae5; color: #065f46; }
+        .status-badge.tidak-hadir { background: #fee2e2; color: #991b1b; }
+        .status-badge:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        /* BLOGGER EMBED FIX */
+        html, body { width: 100% !important; max-width: 100% !important; overflow-x: hidden !important; background: transparent !important; }
+        .container, .card, .header, .tabs, .tab-content { max-width: 100% !important; width: 100% !important; }
+        #scanNotification { max-width: 90vw !important; width: 90vw !important; }
+        .modal-dialog-box { min-width: unset !important; width: 90vw !important; max-width: 90vw !important; }
+        .btn-group-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        @media (max-width: 600px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .stat-card p { font-size: 24px; }
+            .header h1 { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+            <div style="flex:1; min-width:0;">
+                <h1>📋 Sistem Absensi KKKS</h1>
+                <p style="font-size:12px;">📊 Anggota: <strong id="statMembers">0</strong> &nbsp;|&nbsp; ✅ Kehadiran: <strong id="statAttendance">0</strong></p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+                <div id="gsStatusBadge" class="gs-status disconnected" style="font-size:11px; padding:4px 8px;">⚫ Sheets</div>
+                <button id="logoutBtn" class="logout-btn" style="display:none; font-size:12px;" onclick="adminLogout()">🔒 Keluar</button>
+            </div>
+        </div>
+        <div id="adminBadge" class="admin-badge" style="display:none; margin-top:6px; font-size:12px;">🔓 Mode Admin Aktif</div>
+    </div>
+
+    <!-- Message Box -->
+    <div id="messageBox" class="message-box"></div>
+
+    <!-- Main Card -->
+    <div class="card">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('scan', this)">📷 Scan QR</button>
+            <button class="tab" onclick="switchTab('members', this)">👥 Anggota</button>
+            <button class="tab" onclick="switchTab('attendance', this)">📊 Kehadiran</button>
+            <button class="tab" onclick="switchTab('database', this)">📁 Database</button>
+            <button class="tab" onclick="switchTab('export', this)">💾 Export/Import</button>
+            <button class="tab" onclick="switchTab('settings', this)">⚙️ Pengaturan</button>
+        </div>
+
+        <!-- SCAN TAB (PUBLIC) -->
+        <div id="scanTab" class="tab-content">
+            <div class="scan-grid">
+                <div>
+                    <h3 style="margin-bottom: 12px; color: #1f2937; font-size: 16px;">📷 Scan QR Code</h3>
+                    <div class="scanner-container">
+                        <div class="scanner-wrapper">
+                            <div id="reader"></div>
+                            <div class="scanner-info">
+                                <div class="scanner-status">
+                                    <span class="status-dot"></span>
+                                    <span>Scanner Aktif - Arahkan QR Code</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="background: #f8fafc; border-radius: 10px; padding: 15px; margin-top: 12px; border: 2px solid #e5e7eb;">
+                        <h4 style="color: #1f2937; margin-bottom: 8px; font-size: 13px;">📝 Input Manual QR Code</h4>
+                        <p style="color: #666; font-size: 12px; margin-bottom: 10px;">Untuk anggota yang lupa membawa kartu</p>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="manualQrInput" placeholder="Masukkan kode QR..." style="flex: 1; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; min-width: 0;" onkeypress="if(event.key==='Enter') processManualQR()">
+                            <button class="btn btn-primary" onclick="processManualQR()" style="padding: 10px 15px; white-space: nowrap; font-size: 13px;">✓ Submit</button>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h3 style="color: #1f2937; font-size: 16px;">✅ Kehadiran Hari Ini</h3>
+                        <div style="display: flex; align-items: center; gap: 6px; background: #dcfce7; padding: 6px 12px; border-radius: 20px;">
+                            <span class="status-dot" style="background: #10b981;"></span>
+                            <span style="color: #065f46; font-size: 12px; font-weight: 600;">LIVE</span>
+                        </div>
+                    </div>
+                    <div id="todayAttendance" class="attendance-list" style="max-height: 350px;"></div>
+                </div>
+            </div>
+            <div id="scanNotificationBackdrop" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9998; animation: fadeIn 0.3s ease-out;"></div>
+            <div id="scanNotification" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 50px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); max-width: 600px; text-align: center; animation: popIn 0.3s ease-out;">
+                <div id="scanNotificationIcon" style="font-size: 80px; margin-bottom: 20px; animation: checkBounce 0.6s ease-out;">✅</div>
+                <div id="scanNotificationText" style="font-size: 20px; color: white; line-height: 1.8; font-weight: 500;"></div>
+            </div>
+        </div>
+
+        <!-- MEMBERS TAB (ADMIN) -->
+        <div id="membersTab" class="tab-content hidden" style="position:relative;">
+            <div id="membersLock" class="admin-lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">Area Admin</div>
+                <div class="lock-desc">Masukkan password untuk mengakses manajemen anggota</div>
+                <div class="lock-input-wrap">
+                    <input type="password" class="lock-input" placeholder="Password..." onkeypress="if(event.key==='Enter') tryAdminLogin(this.value)">
+                    <button class="btn btn-primary" onclick="tryAdminLogin(this.previousElementSibling.value)">Masuk</button>
+                </div>
+                <div class="lock-error" id="lockError1">❌ Password salah!</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <h2 style="color: #1f2937;">Daftar Anggota</h2>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn btn-success" onclick="syncToGoogleSheets()" title="Sinkronisasi ke Google Sheets">☁️ Sync</button>
+                    <button class="btn btn-primary" onclick="openAddMemberModal()">➕ Tambah Anggota</button>
+                </div>
+            </div>
+            <div class="search-box">
+                <input type="text" id="memberSearch" placeholder="🔍 Cari anggota..." oninput="renderMembers()">
+            </div>
+            <div id="membersContainer"></div>
+        </div>
+
+        <!-- ATTENDANCE TAB (ADMIN) -->
+        <div id="attendanceTab" class="tab-content hidden" style="position:relative;">
+            <div id="attendanceLock" class="admin-lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">Area Admin</div>
+                <div class="lock-desc">Masukkan password untuk mengakses rekap kehadiran</div>
+                <div class="lock-input-wrap">
+                    <input type="password" class="lock-input" placeholder="Password..." onkeypress="if(event.key==='Enter') tryAdminLogin(this.value)">
+                    <button class="btn btn-primary" onclick="tryAdminLogin(this.previousElementSibling.value)">Masuk</button>
+                </div>
+                <div class="lock-error" id="lockError2">❌ Password salah!</div>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 20px;">Rekap Kehadiran</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="previewRekapKehadiran()">📄 Preview Rekap</button>
+                <button class="btn btn-success" onclick="cetakRekapKehadiran()">🖨️ Cetak Rekap</button>
+                <div style="flex: 1; min-width: 200px;">
+                    <select id="rekapMonthFilter" style="width: 100%; padding: 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                        <option value="">Semua Periode</option>
+                    </select>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card"><h3>Total Kehadiran</h3><p id="totalAttendances">0</p></div>
+                <div class="stat-card"><h3>Bulan Ini</h3><p id="thisMonthAttendances">0</p></div>
+                <div class="stat-card"><h3>Hari Ini</h3><p id="todayAttendances">0</p></div>
+            </div>
+            <div class="input-group">
+                <label>Filter Bulan:</label>
+                <select id="monthFilter" onchange="renderAttendanceTable()">
+                    <option value="">Semua Bulan</option>
+                </select>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="attendanceTable">
+                    <thead>
+                        <tr><th>No</th><th>Nama</th><th>Sekolah</th><th>Tanggal</th><th>Status</th><th>Aksi</th></tr>
+                    </thead>
+                    <tbody id="attendanceTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- DATABASE TAB (ADMIN) -->
+        <div id="databaseTab" class="tab-content hidden" style="position:relative;">
+            <div id="databaseLock" class="admin-lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">Area Admin</div>
+                <div class="lock-desc">Masukkan password untuk mengakses database</div>
+                <div class="lock-input-wrap">
+                    <input type="password" class="lock-input" placeholder="Password..." onkeypress="if(event.key==='Enter') tryAdminLogin(this.value)">
+                    <button class="btn btn-primary" onclick="tryAdminLogin(this.previousElementSibling.value)">Masuk</button>
+                </div>
+                <div class="lock-error" id="lockError3">❌ Password salah!</div>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 20px;">📁 Database Kehadiran per Bulan</h2>
+            <div style="background: #dbeafe; border-left: 4px solid #2563eb; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1e40af; margin-bottom: 8px;">ℹ️ Database Arsip</h3>
+                <p style="color: #1e40af; font-size: 14px; margin: 4px 0;">Lihat, cetak, atau download laporan kehadiran berdasarkan bulan.</p>
+            </div>
+            <div class="input-group">
+                <label>Pilih Periode Bulan:</label>
+                <select id="databaseMonthFilter" onchange="loadDatabaseByMonth()">
+                    <option value="">-- Pilih Bulan --</option>
+                </select>
+            </div>
+            <div id="databaseContent" style="display: none;">
+                <div class="stats-grid" style="margin-bottom: 30px;">
+                    <div class="stat-card"><h3>Total Anggota</h3><p id="dbTotalMembers">0</p></div>
+                    <div class="stat-card"><h3>Yang Hadir</h3><p id="dbTotalHadir">0</p></div>
+                    <div class="stat-card"><h3>Tidak Hadir</h3><p id="dbTotalTidakHadir">0</p></div>
+                    <div class="stat-card"><h3>Total Kehadiran</h3><p id="dbTotalAttendances">0</p></div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="previewDatabaseLaporan()">📄 Preview Laporan</button>
+                    <button class="btn btn-success" onclick="cetakDatabaseLaporan()">🖨️ Cetak Laporan</button>
+                    <button class="btn btn-secondary" onclick="exportDatabaseToExcel()">📊 Download Excel</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr><th width="50">No</th><th>Tanggal/Waktu</th><th>Nama</th><th>NIP</th><th>Sekolah</th><th width="120">Status</th></tr>
+                        </thead>
+                        <tbody id="databaseTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="databaseEmpty" style="text-align: center; padding: 60px 20px; color: #9ca3af;">
+                <div style="font-size: 64px; margin-bottom: 20px;">📁</div>
+                <h3 style="color: #6b7280; margin-bottom: 10px;">Pilih Periode Bulan</h3>
+                <p>Pilih bulan dari dropdown di atas untuk melihat data kehadiran</p>
+            </div>
+        </div>
+
+        <!-- EXPORT TAB (ADMIN) -->
+        <div id="exportTab" class="tab-content hidden" style="position:relative;">
+            <div id="exportLock" class="admin-lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">Area Admin</div>
+                <div class="lock-desc">Masukkan password untuk mengakses export/import</div>
+                <div class="lock-input-wrap">
+                    <input type="password" class="lock-input" placeholder="Password..." onkeypress="if(event.key==='Enter') tryAdminLogin(this.value)">
+                    <button class="btn btn-primary" onclick="tryAdminLogin(this.previousElementSibling.value)">Masuk</button>
+                </div>
+                <div class="lock-error" id="lockError4">❌ Password salah!</div>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 20px;">Export & Import Data</h2>
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">📤 Export Data</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-success" onclick="exportToExcel()">📊 Export ke Excel</button>
+                    <button class="btn btn-primary" onclick="exportToJSON()">💾 Backup (JSON)</button>
+                    <button class="btn btn-secondary" onclick="downloadQRCodes()">🖨️ Cetak Semua Kartu KKKS</button>
+                </div>
+            </div>
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">📥 Import Data</h3>
+                <div style="margin-bottom: 20px;">
+                    <h4 style="color: #374151; margin-bottom: 10px;">Import Anggota dari Excel</h4>
+                    <p style="color: #6b7280; font-size: 14px; margin-bottom: 10px;">Format Excel harus memiliki kolom: <strong>Nama, Sekolah, NIP</strong></p>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="excelFileInput" accept=".xlsx,.xls" onchange="importFromExcel(event)">
+                        <label for="excelFileInput" class="file-input-label">📄 Pilih File Excel (.xlsx, .xls)</label>
+                    </div>
+                    <button class="btn btn-secondary" onclick="downloadTemplateExcel()" style="margin-top: 10px;">📋 Download Template Excel</button>
+                </div>
+                <div>
+                    <h4 style="color: #374151; margin-bottom: 10px;">Restore dari Backup</h4>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="jsonFileInput" accept=".json" onchange="importFromJSON(event)">
+                        <label for="jsonFileInput" class="file-input-label">💾 Pilih File JSON Backup</label>
+                    </div>
+                </div>
+            </div>
+            <div style="background: #fee2e2; padding: 20px; border-radius: 8px;">
+                <h3 style="color: #991b1b; margin-bottom: 15px;">⚠️ Zona Berbahaya</h3>
+                <button class="btn btn-danger" onclick="clearAllData()">🗑️ Hapus Semua Data</button>
+            </div>
+        </div>
+
+        <!-- SETTINGS TAB (ADMIN) -->
+        <div id="settingsTab" class="tab-content hidden" style="position:relative;">
+            <div id="settingsLock" class="admin-lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">Area Admin</div>
+                <div class="lock-desc">Masukkan password untuk mengakses pengaturan</div>
+                <div class="lock-input-wrap">
+                    <input type="password" class="lock-input" placeholder="Password..." onkeypress="if(event.key==='Enter') tryAdminLogin(this.value)">
+                    <button class="btn btn-primary" onclick="tryAdminLogin(this.previousElementSibling.value)">Masuk</button>
+                </div>
+                <div class="lock-error" id="lockError5">❌ Password salah!</div>
+            </div>
+            <h2 style="color: #1f2937; margin-bottom: 20px;">⚙️ Pengaturan</h2>
+
+            <!-- Google Sheets Configuration -->
+            <div class="gs-config-box">
+                <h3>☁️ Konfigurasi Google Sheets</h3>
+                <p style="color: #0369a1; font-size: 13px; margin-bottom: 15px;">
+                    Terhubung dengan Google Sheets sebagai database cloud. Data tersimpan dan bisa diakses dari mana saja.
+                </p>
+                <div style="background: #dcfce7; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                    <p style="color: #166534; font-size: 13px; font-weight: 600;">✅ URL Google Apps Script sudah dikonfigurasi secara default di sistem ini.</p>
+                </div>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>URL Google Apps Script Web App:</label>
+                    <input type="text" id="gsWebAppUrl" value="https://script.google.com/macros/s/AKfycbyhbPD5Yy6scFOr_iPguUpkCc-aWVtE8umptYtWoJ6g8cZGg6HOZp42aIyuCNldgpxY/exec" placeholder="https://script.google.com/macros/s/.../exec">
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="saveGSConfig()">💾 Simpan Konfigurasi</button>
+                    <button class="btn btn-success" onclick="testGSConnection()">🔌 Test Koneksi</button>
+                    <button class="btn btn-warning" onclick="syncToGoogleSheets()">☁️ Sync Sekarang</button>
+                    <button class="btn btn-secondary" onclick="loadFromGoogleSheets()">⬇️ Load dari Cloud</button>
+                </div>
+                <p id="gsTestResult" style="margin-top: 10px; font-size: 13px; color: #6b7280;"></p>
+            </div>
+
+            <!-- Password Settings -->
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">🔑 Ubah Password Admin</h3>
+                <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                    <div style="flex:1; min-width: 200px;">
+                        <label style="display:block; font-weight:600; margin-bottom:6px; color:#374151;">Password Lama</label>
+                        <input type="password" id="oldPassword" placeholder="Password lama" style="width:100%; padding:12px; border:2px solid #e5e7eb; border-radius:8px; font-size:14px;">
+                    </div>
+                    <div style="flex:1; min-width: 200px;">
+                        <label style="display:block; font-weight:600; margin-bottom:6px; color:#374151;">Password Baru</label>
+                        <input type="password" id="newPassword" placeholder="Password baru" style="width:100%; padding:12px; border:2px solid #e5e7eb; border-radius:8px; font-size:14px;">
+                    </div>
+                    <button class="btn btn-warning" onclick="changeAdminPassword()">🔑 Ubah Password</button>
+                </div>
+            </div>
+
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">🔧 Utilitas</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-warning" onclick="regenerateAllQR()">🔄 Regenerate Semua QR</button>
+                    <button class="btn btn-secondary" onclick="validateData()">✅ Validasi Data</button>
+                </div>
+                <div id="validationResults" style="margin-top: 20px; display: none;"></div>
+            </div>
+
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #1f2937; margin-bottom: 15px;">ℹ️ Informasi Sistem</h3>
+                <p style="color: #6b7280; margin: 5px 0;">Database: LocalStorage + Google Sheets (Cloud)</p>
+                <p style="color: #6b7280; margin: 5px 0;">Format QR: <strong>KKKS-[NIP]-1768888648852</strong></p>
+            </div>
+
+            <div style="background: #f0f9ff; border-left: 4px solid #2563eb; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                <h3 style="color: #1e40af; margin-bottom: 15px;">🎨 Logo KKKS untuk Kartu</h3>
+                <div class="logo-upload-section">
+                    <div class="logo-preview" id="logoPreview">
+                        <span class="logo-preview-text">Belum ada logo</span>
+                    </div>
+                    <input type="file" id="logoUpload" accept="image/*" style="display: none;" onchange="handleLogoUpload(event)">
+                    <button class="btn btn-primary" onclick="document.getElementById('logoUpload').click()">📤 Upload Logo</button>
+                    <button class="btn btn-danger" onclick="removeLogo()" style="margin-left: 10px;">🗑️ Hapus Logo</button>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 10px;">Logo akan muncul di kartu ID anggota</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS -->
+
+<!-- Add Member Modal -->
+<div id="addMemberModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAddMemberModal()">&times;</span>
+        <h2 style="margin-bottom: 20px; color: #1f2937;">Tambah Anggota Baru</h2>
+        <div class="input-group"><label>Nama Lengkap</label><input type="text" id="newMemberName" placeholder="Masukkan nama lengkap"></div>
+        <div class="input-group"><label>Sekolah</label><input type="text" id="newMemberSchool" placeholder="Masukkan nama sekolah"></div>
+        <div class="input-group"><label>NIP</label><input type="text" id="newMemberNIP" placeholder="Masukkan NIP"></div>
+        <div class="input-group">
+            <label>QR Code (Opsional - Otomatis jika kosong)</label>
+            <input type="text" id="newMemberQR" placeholder="KKKS-[NIP]-1768888648852">
+            <p style="color: #6b7280; font-size: 12px; margin-top: 5px;">Format: KKKS-[NIP]-1768888648852. Kosongkan untuk generate otomatis berdasarkan NIP.</p>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="addMember()">➕ Tambah</button>
+            <button class="btn btn-secondary" onclick="closeAddMemberModal()">❌ Batal</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Member Modal -->
+<div id="editMemberModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeEditMemberModal()">&times;</span>
+        <h2 style="margin-bottom: 20px; color: #1f2937;">Edit Anggota</h2>
+        <input type="hidden" id="editMemberId">
+        <div class="input-group"><label>Nama Lengkap</label><input type="text" id="editMemberName"></div>
+        <div class="input-group"><label>Sekolah</label><input type="text" id="editMemberSchool"></div>
+        <div class="input-group"><label>NIP</label><input type="text" id="editMemberNIP"></div>
+        <div class="input-group">
+            <label>QR Code</label>
+            <input type="text" id="editMemberQR">
+            <p style="color: #6b7280; font-size: 12px; margin-top: 5px;">Format: KKKS-[NIP]-1768888648852</p>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="updateMember()">💾 Simpan</button>
+            <button class="btn btn-secondary" onclick="closeEditMemberModal()">❌ Batal</button>
+        </div>
+    </div>
+</div>
+
+<!-- View QR Modal -->
+<div id="viewQRModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeViewQRModal()">&times;</span>
+        <h2 style="margin-bottom: 20px; text-align: center; color: #1f2937;">QR Code</h2>
+        <div id="qrMemberInfo" style="text-align: center; margin-bottom: 20px;"></div>
+        <div class="qr-display"><div id="qrcode"></div></div>
+        <div style="text-align: center; margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+            <button class="btn btn-primary" onclick="downloadQR()">💾 Download QR</button>
+            <button class="btn btn-success" onclick="printSingleKKKSCard()">🖨️ Cetak Kartu</button>
+        </div>
+    </div>
+</div>
+
+<!-- Member Detail Modal -->
+<div id="memberDetailModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeMemberDetailModal()">&times;</span>
+        <h2 style="margin-bottom: 20px; color: #1f2937;">Detail Anggota & Kehadiran</h2>
+        <div id="memberDetailInfo"></div>
+        <div style="margin-top: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: #1f2937;">Riwayat Kehadiran</h3>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="previewPortfolio()">📄 Preview Portfolio</button>
+                    <button class="btn btn-success" onclick="cetakPortfolio()">🖨️ Cetak Portfolio</button>
+                </div>
+            </div>
+            <div id="memberAttendanceList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Attendance Modal -->
+<div id="editAttendanceModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeEditAttendanceModal()">&times;</span>
+        <h2 style="margin-bottom: 20px; color: #1f2937;">Edit Kehadiran</h2>
+        <input type="hidden" id="editAttendanceId">
+        <div class="input-group"><label>Nama Anggota</label><input type="text" id="editAttendanceName" disabled></div>
+        <div class="input-group"><label>Tanggal & Waktu</label><input type="datetime-local" id="editAttendanceDate"></div>
+        <div class="input-group"><label>Catatan (Opsional)</label><textarea id="editAttendanceNote" rows="3" placeholder="Tambahkan catatan..."></textarea></div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="updateAttendance()">💾 Simpan</button>
+            <button class="btn btn-secondary" onclick="closeEditAttendanceModal()">❌ Batal</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Portfolio Modal -->
+<div id="previewPortfolioModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <span class="close" onclick="closePreviewPortfolioModal()">&times;</span>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <button class="btn btn-success" onclick="cetakPortfolio()">🖨️ Cetak Sekarang</button>
+        </div>
+        <div id="portfolioPreviewContent"></div>
+    </div>
+</div>
+
+<!-- Preview Rekap Modal -->
+<div id="previewRekapModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <span class="close" onclick="closePreviewRekapModal()">&times;</span>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <button class="btn btn-success" onclick="cetakRekapKehadiran()">🖨️ Cetak Sekarang</button>
+        </div>
+        <div id="rekapPreviewContent"></div>
+    </div>
+</div>
+
+<script>
+// ============================================
+// GLOBAL VARIABLES
+// ============================================
+let members = [];
+let attendance = [];
+let html5QrCode = null;
+let currentQRMember = null;
+let currentMemberDetail = null;
+let attendanceRefreshInterval = null;
+let isAdminLoggedIn = false;
+let kkksLogo = null;
+
+// *** URL GOOGLE APPS SCRIPT SUDAH HARDCODE DI SINI ***
+const DEFAULT_GS_URL = 'https://script.google.com/macros/s/AKfycbyhbPD5Yy6scFOr_iPguUpkCc-aWVtE8umptYtWoJ6g8cZGg6HOZp42aIyuCNldgpxY/exec';
+let gsWebAppUrl = DEFAULT_GS_URL;
+
+const STORAGE_KEYS = {
+    MEMBERS: 'kkks-members',
+    ATTENDANCE: 'kkks-attendance',
+    LOGO: 'kkks-logo',
+    ADMIN_PASS: 'kkks-admin-pass',
+    GS_URL: 'kkks-gs-url'
+};
+
+const DEFAULT_ADMIN_PASSWORD = 'admin123';
+
+// ============================================
+// ADMIN AUTH
+// ============================================
+function tryAdminLogin(password) {
+    const savedPass = localStorage.getItem(STORAGE_KEYS.ADMIN_PASS) || DEFAULT_ADMIN_PASSWORD;
+    if (password === savedPass) {
+        isAdminLoggedIn = true;
+        unlockAllAdminTabs();
+        document.getElementById('adminBadge').style.display = 'inline-flex';
+        document.getElementById('logoutBtn').style.display = 'inline-block';
+        showMessage('✅ Login admin berhasil!', 'success');
+    } else {
+        document.querySelectorAll('.lock-error').forEach(el => {
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        });
+    }
+}
+
+function unlockAllAdminTabs() {
+    ['membersLock','attendanceLock','databaseLock','exportLock','settingsLock'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+}
+
+function lockAllAdminTabs() {
+    ['membersLock','attendanceLock','databaseLock','exportLock','settingsLock'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'flex';
+    });
+}
+
+function adminLogout() {
+    isAdminLoggedIn = false;
+    lockAllAdminTabs();
+    document.getElementById('adminBadge').style.display = 'none';
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.querySelectorAll('.lock-input').forEach(el => el.value = '');
+    switchTab('scan', document.querySelector('.tab.active'));
+    showMessage('🔒 Admin telah keluar.', 'warning');
+}
+
+function changeAdminPassword() {
+    const oldPass = document.getElementById('oldPassword').value;
+    const newPass = document.getElementById('newPassword').value;
+    const savedPass = localStorage.getItem(STORAGE_KEYS.ADMIN_PASS) || DEFAULT_ADMIN_PASSWORD;
+    if (oldPass !== savedPass) { customAlert('❌ Password lama salah!'); return; }
+    if (!newPass || newPass.length < 4) { customAlert('❌ Password baru minimal 4 karakter!'); return; }
+    localStorage.setItem(STORAGE_KEYS.ADMIN_PASS, newPass);
+    document.getElementById('oldPassword').value = '';
+    document.getElementById('newPassword').value = '';
+    showMessage('✅ Password berhasil diubah!', 'success');
+}
+
+// ============================================
+// GOOGLE SHEETS INTEGRATION
+// ============================================
+function saveGSConfig() {
+    const url = document.getElementById('gsWebAppUrl').value.trim();
+    gsWebAppUrl = url || DEFAULT_GS_URL;
+    localStorage.setItem(STORAGE_KEYS.GS_URL, gsWebAppUrl);
+    document.getElementById('gsWebAppUrl').value = gsWebAppUrl;
+    updateGSStatus(gsWebAppUrl ? 'configured' : 'disconnected');
+    showMessage('✅ Konfigurasi Google Sheets disimpan!', 'success');
+}
+
+function updateGSStatus(status) {
+    const badge = document.getElementById('gsStatusBadge');
+    if (status === 'connected') {
+        badge.className = 'gs-status connected';
+        badge.textContent = '🟢 Sheets Terhubung';
+    } else if (status === 'syncing') {
+        badge.className = 'gs-status syncing';
+        badge.textContent = '🔄 Sinkronisasi...';
+    } else if (status === 'configured') {
+        badge.className = 'gs-status connected';
+        badge.textContent = '🔵 Sheets Siap';
+    } else {
+        badge.className = 'gs-status disconnected';
+        badge.textContent = '⚫ Sheets';
+    }
+}
+
+async function testGSConnection() {
+    const url = document.getElementById('gsWebAppUrl').value.trim() || gsWebAppUrl;
+    if (!url) { customAlert('❌ URL tidak tersedia!'); return; }
+    const result = document.getElementById('gsTestResult');
+    result.textContent = '⏳ Menguji koneksi...';
+    result.style.color = '#f59e0b';
+    try {
+        const resp = await fetch(`${url}?action=load&sheet=Members`, { method: 'GET' });
+        if (resp.ok) {
+            result.textContent = '✅ Koneksi berhasil! Google Sheets siap digunakan.';
+            result.style.color = '#10b981';
+            updateGSStatus('connected');
+        } else {
+            throw new Error('Response not OK: ' + resp.status);
+        }
+    } catch (e) {
+        result.textContent = '❌ Koneksi gagal: ' + e.message;
+        result.style.color = '#ef4444';
+        updateGSStatus('disconnected');
+    }
+}
+
+async function syncToGoogleSheets() {
+    if (!gsWebAppUrl) {
+        customAlert('❌ URL Google Apps Script tidak tersedia!');
+        return;
+    }
+    updateGSStatus('syncing');
+    showMessage('⏳ Sinkronisasi ke Google Sheets...', 'warning');
+    try {
+        const membersRows = [
+            ['ID', 'Nama', 'Sekolah', 'NIP', 'QR Code'],
+            ...members.map(m => [m.id, m.name, m.school, m.nip, m.qrCode])
+        ];
+        await fetch(gsWebAppUrl, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'save', sheet: 'Members', rows: membersRows })
+        });
+        const attendanceRows = [
+            ['ID', 'Member ID', 'Nama', 'Sekolah', 'Tanggal', 'Bulan', 'Catatan', 'Status'],
+            ...attendance.map(a => [a.id, a.memberId, a.memberName, a.school, a.date, a.month, a.note || '', a.status || 'HADIR'])
+        ];
+        await fetch(gsWebAppUrl, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'save', sheet: 'Attendance', rows: attendanceRows })
+        });
+        updateGSStatus('connected');
+        showMessage('✅ Sinkronisasi ke Google Sheets berhasil!', 'success');
+        showCustomNotification('Sinkronisasi Berhasil', `${members.length} anggota & ${attendance.length} kehadiran tersimpan ke cloud`, 'success');
+    } catch (e) {
+        updateGSStatus('configured');
+        showMessage('❌ Gagal sinkronisasi: ' + e.message, 'warning');
+    }
+}
+
+async function loadFromGoogleSheets() {
+    if (!gsWebAppUrl) {
+        customAlert('❌ URL Google Apps Script tidak tersedia!');
+        return;
+    }
+    const confirmed = await customConfirm('Load data dari Google Sheets?\n\nData lokal akan diganti dengan data dari cloud!');
+    if (!confirmed) return;
+    updateGSStatus('syncing');
+    showMessage('⏳ Memuat dari Google Sheets...', 'warning');
+    try {
+        const mResp = await fetch(`${gsWebAppUrl}?action=load&sheet=Members`);
+        const mData = await mResp.json();
+        if (mData.rows && mData.rows.length > 1) {
+            members = mData.rows.slice(1).map(r => ({
+                id: r[0], name: r[1], school: r[2], nip: r[3], qrCode: r[4]
+            })).filter(m => m.id && m.name);
+        }
+        const aResp = await fetch(`${gsWebAppUrl}?action=load&sheet=Attendance`);
+        const aData = await aResp.json();
+        if (aData.rows && aData.rows.length > 1) {
+            attendance = aData.rows.slice(1).map(r => ({
+    id: r[0], memberId: r[1], memberName: r[2], school: r[3],
+    date: r[4], 
+    month: new Date(r[4]).toLocaleString('id-ID', { month: 'long', year: 'numeric' }),
+    note: r[6] || '', status: r[7] || 'HADIR'
+})).filter(a => a.id && a.memberId);
+        }
+        saveToLocalStorage();
+        renderMembers();
+        renderAttendanceTable();
+        renderTodayAttendance();
+        populateMonthFilter();
+        updateGSStatus('connected');
+        showMessage(`✅ Data berhasil dimuat! (${members.length} anggota, ${attendance.length} kehadiran)`, 'success');
+    } catch (e) {
+        updateGSStatus('configured');
+        showMessage('❌ Gagal memuat dari Google Sheets', 'warning');
+        customAlert('❌ Gagal memuat data!\n\nError: ' + e.message);
+    }
+}
+
+// ============================================
+// CUSTOM DIALOGS
+// ============================================
+function customConfirm(message) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-dialog-overlay';
+        overlay.style.display = 'block';
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-dialog-box';
+        dialog.innerHTML = `
+            <div class="modal-dialog-header"><h3 class="modal-dialog-title">Konfirmasi</h3></div>
+            <div class="modal-dialog-content">${message}</div>
+            <div class="modal-dialog-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-dialog-overlay').remove(); window.dialogResolve(false);">Batal</button>
+                <button class="btn btn-primary" onclick="this.closest('.modal-dialog-overlay').remove(); window.dialogResolve(true);">OK</button>
+            </div>`;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        window.dialogResolve = resolve;
+    });
+}
+
+function customAlert(message) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-dialog-overlay';
+        overlay.style.display = 'block';
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-dialog-box';
+        dialog.innerHTML = `
+            <div class="modal-dialog-header"><h3 class="modal-dialog-title">Pemberitahuan</h3></div>
+            <div class="modal-dialog-content">${message}</div>
+            <div class="modal-dialog-footer">
+                <button class="btn btn-primary" onclick="this.closest('.modal-dialog-overlay').remove(); window.dialogResolve(true);">OK</button>
+            </div>`;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        window.dialogResolve = resolve;
+    });
+}
+
+function customPrompt(message, defaultValue = '') {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-dialog-overlay';
+        overlay.style.display = 'block';
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-dialog-box';
+        dialog.innerHTML = `
+            <div class="modal-dialog-header"><h3 class="modal-dialog-title">Input</h3></div>
+            <div class="modal-dialog-content">
+                <p style="margin-bottom: 12px;">${message}</p>
+                <input type="text" id="promptInput" value="${defaultValue}" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+            </div>
+            <div class="modal-dialog-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-dialog-overlay').remove(); window.dialogResolve(null);">Batal</button>
+                <button class="btn btn-primary" onclick="const val=document.getElementById('promptInput').value; this.closest('.modal-dialog-overlay').remove(); window.dialogResolve(val);">OK</button>
+            </div>`;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        setTimeout(() => { const inp = document.getElementById('promptInput'); if(inp) inp.focus(); }, 100);
+        window.dialogResolve = resolve;
+    });
+}
+
+// ============================================
+// LOCALSTORAGE
+// ============================================
+function saveToLocalStorage() {
+    try {
+        localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members));
+        localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(attendance));
+        updateStats();
+        return true;
+    } catch (error) {
+        if (error.name === 'QuotaExceededError') customAlert('❌ Penyimpanan penuh!');
+        return false;
+    }
+}
+
+function loadFromLocalStorage() {
+    try {
+        const sm = localStorage.getItem(STORAGE_KEYS.MEMBERS);
+        const sa = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
+        if (sm) members = JSON.parse(sm);
+        if (sa) attendance = JSON.parse(sa);
+
+        // Gunakan URL dari localStorage jika ada, kalau tidak pakai DEFAULT_GS_URL
+        const savedUrl = localStorage.getItem(STORAGE_KEYS.GS_URL);
+        if (savedUrl) {
+            gsWebAppUrl = savedUrl;
+        }
+        // Selalu tampilkan URL yang aktif di input field
+        const inputEl = document.getElementById('gsWebAppUrl');
+        if (inputEl) inputEl.value = gsWebAppUrl;
+        updateGSStatus('configured');
+
+        updateStats();
+        return true;
+    } catch (e) { return false; }
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+window.addEventListener('DOMContentLoaded', function() {
+    loadFromLocalStorage();
+    loadLogo();
+    renderMembers();
+    renderAttendanceTable();
+    renderTodayAttendance();
+    populateMonthFilter();
+    updateStats();
+    startAttendanceAutoRefresh();
+});
+
+window.addEventListener('load', function() {
+    let retryCount = 0;
+    function tryInitScanner() {
+        if (typeof Html5Qrcode !== 'undefined') {
+            setTimeout(initScanner, 500);
+        } else {
+            retryCount++;
+            if (retryCount < 5) setTimeout(tryInitScanner, 1000);
+            else showScannerError();
+        }
+    }
+    tryInitScanner();
+});
+
+function showScannerError() {
+    const el = document.getElementById('reader');
+    if (el) el.innerHTML = `<div style="padding: 40px; text-align: center; background: rgba(255,255,255,0.9); border-radius: 12px;">
+        <p style="color: #ef4444; font-size: 18px; margin-bottom: 15px; font-weight: bold;">⚠️ QR Scanner Tidak Tersedia</p>
+        <button class="btn btn-primary" onclick="location.reload()">🔄 Refresh Halaman</button></div>`;
+}
+
+// ============================================
+// QR SCANNER
+// ============================================
+function initScanner() {
+    if (typeof Html5Qrcode === 'undefined') { showScannerError(); return; }
+    try {
+        html5QrCode = new Html5Qrcode("reader");
+        startScanner();
+    } catch (e) {
+        document.getElementById('reader').innerHTML = `<div style="padding:40px;text-align:center;background:rgba(255,255,255,0.2);border-radius:12px;">
+            <p style="color:white;font-size:16px;margin-bottom:10px;">⚠️ Gagal menginisialisasi scanner</p>
+            <button class="btn btn-primary" onclick="initScanner()" style="margin-top:15px;">🔄 Coba Lagi</button></div>`;
+    }
+}
+
+function startScanner() {
+    const config = { fps: 10, qrbox: { width: 200, height: 200 }, aspectRatio: 1.0 };
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanError)
+    .catch(err => {
+        document.getElementById('reader').innerHTML = `<div style="padding:40px;text-align:center;background:rgba(255,255,255,0.95);border-radius:12px;">
+            <p style="color:#f59e0b;font-size:18px;margin-bottom:10px;font-weight:600;">📷 Kamera Tidak Tersedia</p>
+            <p style="color:#6b7280;font-size:14px;margin-bottom:15px;">Silakan gunakan <strong>Input Manual QR</strong> di bawah</p>
+            <p style="color:#9ca3af;font-size:12px;">Atau berikan izin akses kamera</p></div>`;
+        setTimeout(() => { const inp = document.getElementById('manualQrInput'); if(inp) inp.focus(); }, 500);
+    });
+}
+
+function onScanSuccess(decodedText) {
+    const member = members.find(m => m.qrCode === decodedText);
+    if (!member) {
+        showErrorNotification('❌ QR Code Tidak Terdaftar', `QR: <strong>${decodedText}</strong><br>tidak ditemukan dalam database.`);
+        showMessage('QR Code tidak terdaftar!', 'warning');
+        return;
+    }
+    const today = new Date().toDateString();
+    const alreadyCheckedIn = attendance.some(a => a.memberId === member.id && new Date(a.date).toDateString() === today);
+    if (alreadyCheckedIn) {
+        const existing = attendance.find(a => a.memberId === member.id && new Date(a.date).toDateString() === today);
+        const time = new Date(existing.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        showWarningNotification('⚠️ Sudah Absen Hari Ini',
+            `Bapak/Ibu <strong>${member.name}</strong><br>sudah absen pukul <strong>${time}</strong>`);
+        showMessage(`${member.name} sudah absen hari ini!`, 'warning');
+        return;
+    }
+    const newAttendance = {
+        id: generateId(), memberId: member.id, memberName: member.name,
+        school: member.school, date: new Date().toISOString(),
+        month: new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' }),
+        note: '', status: 'HADIR'
+    };
+    attendance.push(newAttendance);
+    saveToLocalStorage();
+
+    // Auto sync jika GS dikonfigurasi
+    if (gsWebAppUrl) syncToGoogleSheets().catch(() => {});
+
+    const todayDate = new Date().toLocaleDateString('id-ID', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    showSuccessNotification(
+        `Terima kasih Bapak/Ibu <strong>${member.name}</strong><br>` +
+        `Kepala Sekolah <strong>${member.school}</strong><br>` +
+        `telah hadir pada pertemuan KKKS<br>tanggal <strong>${todayDate}</strong>`
+    );
+    renderTodayAttendance();
+    renderAttendanceTable();
+    showMessage(`✅ ${member.name} berhasil absen!`, 'success');
+}
+
+function showSuccessNotification(message) {
+    const n = document.getElementById('scanNotification');
+    const b = document.getElementById('scanNotificationBackdrop');
+    n.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+    document.getElementById('scanNotificationIcon').innerHTML = '✅';
+    document.getElementById('scanNotificationText').innerHTML = message;
+    document.getElementById('scanNotificationText').style.color = 'white';
+    b.style.display = 'block'; n.style.display = 'block';
+    setTimeout(() => { n.style.display = 'none'; b.style.display = 'none'; }, 3000);
+}
+function showWarningNotification(title, message) {
+    const n = document.getElementById('scanNotification');
+    const b = document.getElementById('scanNotificationBackdrop');
+    n.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+    document.getElementById('scanNotificationIcon').innerHTML = '⚠️';
+    document.getElementById('scanNotificationText').innerHTML = `<div style="font-size:24px;font-weight:bold;margin-bottom:15px;">${title}</div>${message}`;
+    document.getElementById('scanNotificationText').style.color = 'white';
+    b.style.display = 'block'; n.style.display = 'block';
+    setTimeout(() => { n.style.display = 'none'; b.style.display = 'none'; }, 3000);
+}
+function showErrorNotification(title, message) {
+    const n = document.getElementById('scanNotification');
+    const b = document.getElementById('scanNotificationBackdrop');
+    n.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    document.getElementById('scanNotificationIcon').innerHTML = '❌';
+    document.getElementById('scanNotificationText').innerHTML = `<div style="font-size:24px;font-weight:bold;margin-bottom:15px;">${title}</div>${message}`;
+    document.getElementById('scanNotificationText').style.color = 'white';
+    b.style.display = 'block'; n.style.display = 'block';
+    setTimeout(() => { n.style.display = 'none'; b.style.display = 'none'; }, 3000);
+}
+function onScanError() {}
+
+// ============================================
+// MEMBER FUNCTIONS
+// ============================================
+function renderMembers() {
+    const container = document.getElementById('membersContainer');
+    const searchTerm = (document.getElementById('memberSearch').value || '').toLowerCase();
+    const filteredMembers = members.filter(m =>
+        m.name.toLowerCase().includes(searchTerm) ||
+        m.school.toLowerCase().includes(searchTerm) ||
+        m.nip.toLowerCase().includes(searchTerm)
+    );
+    if (filteredMembers.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #9ca3af;">Tidak ada anggota</p>';
+        return;
+    }
+    let html = '';
+    filteredMembers.forEach(member => {
+        const cnt = attendance.filter(a => a.memberId === member.id).length;
+        html += `<div class="member-card" onclick="viewMemberDetail('${member.id}')">
+            <div class="member-card-header">
+                <div class="member-info">
+                    <h3>${member.name}</h3>
+                    <p>🏫 ${member.school}</p>
+                    <p>🆔 ${member.nip}</p>
+                    <p>✅ ${cnt} kehadiran</p>
+                    <div class="qr-code-display" style="margin-top:8px;">${member.qrCode}</div>
+                </div>
+                <div class="member-actions" onclick="event.stopPropagation()">
+                    <button class="btn btn-primary" onclick="viewMemberQR('${member.id}')">📱 QR</button>
+                    <button class="btn btn-warning" onclick="openEditMemberModal('${member.id}')">✏️</button>
+                    <button class="btn btn-danger" onclick="deleteMember('${member.id}')">🗑️</button>
+                </div>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+function openAddMemberModal() {
+    document.getElementById('addMemberModal').style.display = 'block';
+    ['newMemberName','newMemberSchool','newMemberNIP','newMemberQR'].forEach(id => document.getElementById(id).value = '');
+}
+function closeAddMemberModal() { document.getElementById('addMemberModal').style.display = 'none'; }
+
+function addMember() {
+    const name = document.getElementById('newMemberName').value.trim();
+    const school = document.getElementById('newMemberSchool').value.trim();
+    const nip = document.getElementById('newMemberNIP').value.trim();
+    let qrCode = document.getElementById('newMemberQR').value.trim();
+    if (!name || !school || !nip) { customAlert('Nama, Sekolah, dan NIP harus diisi!'); return; }
+    if (!qrCode) qrCode = `KKKS-${nip}-1768888648852`;
+    if (members.some(m => m.qrCode === qrCode)) { customAlert('QR Code sudah digunakan!'); return; }
+    members.push({ id: generateId(), name, school, nip, qrCode });
+    saveToLocalStorage();
+    closeAddMemberModal();
+    renderMembers();
+    showMessage(`✅ ${name} berhasil ditambahkan!`, 'success');
+    showCustomNotification('Anggota Ditambahkan', `${name} berhasil ditambahkan`, 'success');
+}
+
+function openEditMemberModal(memberId) {
+    const m = members.find(m => m.id === memberId);
+    if (!m) return;
+    document.getElementById('editMemberId').value = m.id;
+    document.getElementById('editMemberName').value = m.name;
+    document.getElementById('editMemberSchool').value = m.school;
+    document.getElementById('editMemberNIP').value = m.nip;
+    document.getElementById('editMemberQR').value = m.qrCode;
+    document.getElementById('editMemberModal').style.display = 'block';
+}
+function closeEditMemberModal() { document.getElementById('editMemberModal').style.display = 'none'; }
+
+function updateMember() {
+    const id = document.getElementById('editMemberId').value;
+    const name = document.getElementById('editMemberName').value.trim();
+    const school = document.getElementById('editMemberSchool').value.trim();
+    const nip = document.getElementById('editMemberNIP').value.trim();
+    const qrCode = document.getElementById('editMemberQR').value.trim();
+    if (!name || !school || !nip || !qrCode) { customAlert('Semua field harus diisi!'); return; }
+    if (members.some(m => m.id !== id && m.qrCode === qrCode)) { customAlert('QR Code sudah digunakan!'); return; }
+    const idx = members.findIndex(m => m.id === id);
+    if (idx === -1) return;
+    members[idx] = { ...members[idx], name, school, nip, qrCode };
+    attendance.forEach(a => { if (a.memberId === id) { a.memberName = name; a.school = school; } });
+    saveToLocalStorage();
+    closeEditMemberModal();
+    renderMembers();
+    renderAttendanceTable();
+    showMessage(`✅ Data ${name} berhasil diupdate!`, 'success');
+}
+
+async function deleteMember(memberId) {
+    const m = members.find(m => m.id === memberId);
+    if (!m) return;
+    if (!await customConfirm(`Hapus ${m.name}? Semua data kehadiran akan ikut terhapus!`)) return;
+    members = members.filter(m => m.id !== memberId);
+    attendance = attendance.filter(a => a.memberId !== memberId);
+    saveToLocalStorage();
+    renderMembers();
+    renderAttendanceTable();
+    showMessage(`✅ ${m.name} berhasil dihapus!`, 'success');
+}
+
+// ============================================
+// MEMBER DETAIL
+// ============================================
+function viewMemberDetail(memberId) {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+    currentMemberDetail = member;
+    const mAtt = attendance.filter(a => a.memberId === memberId).sort((a,b) => new Date(b.date)-new Date(a.date));
+    document.getElementById('memberDetailInfo').innerHTML = `
+        <div class="info-grid">
+            <div class="info-label">Nama:</div><div class="info-value">${member.name}</div>
+            <div class="info-label">Sekolah:</div><div class="info-value">${member.school}</div>
+            <div class="info-label">NIP:</div><div class="info-value">${member.nip}</div>
+            <div class="info-label">QR Code:</div><div class="info-value"><span class="qr-code-display">${member.qrCode}</span></div>
+            <div class="info-label">Total Kehadiran:</div><div class="info-value"><strong>${mAtt.length}</strong></div>
+        </div>`;
+    let attHTML = mAtt.length === 0 ? '<p style="text-align:center;color:#9ca3af;">Belum ada kehadiran</p>' : '';
+    mAtt.forEach((record, i) => {
+        const date = new Date(record.date).toLocaleString('id-ID', { dateStyle:'full', timeStyle:'short' });
+        attHTML += `<div class="attendance-detail-item">
+            <div>
+                <p style="font-weight:600;color:#1f2937;margin-bottom:5px;">${i+1}. ${date}</p>
+                ${record.note ? `<p style="color:#6b7280;font-size:13px;">📝 ${record.note}</p>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-warning" onclick="openEditAttendanceModal('${record.id}')">✏️ Edit</button>
+                <button class="btn btn-danger" onclick="deleteAttendanceFromDetail('${record.id}')">🗑️</button>
+            </div>
+        </div>`;
+    });
+    document.getElementById('memberAttendanceList').innerHTML = attHTML;
+    document.getElementById('memberDetailModal').style.display = 'block';
+}
+function closeMemberDetailModal() { document.getElementById('memberDetailModal').style.display = 'none'; currentMemberDetail = null; }
+
+async function deleteAttendanceFromDetail(attendanceId) {
+    if (!await customConfirm('Hapus data kehadiran ini?')) return;
+    attendance = attendance.filter(a => a.id !== attendanceId);
+    saveToLocalStorage();
+    if (currentMemberDetail) viewMemberDetail(currentMemberDetail.id);
+    renderAttendanceTable();
+    renderTodayAttendance();
+    renderMembers();
+    showMessage('✅ Data kehadiran berhasil dihapus!', 'success');
+}
+
+// ============================================
+// QR CODE
+// ============================================
+function viewMemberQR(memberId) {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+    currentQRMember = member;
+    document.getElementById('qrMemberInfo').innerHTML = `
+        <h3 style="color:#1f2937;margin-bottom:5px;">${member.name}</h3>
+        <p style="color:#6b7280;">${member.school}</p>
+        <p style="color:#6b7280;font-size:13px;margin-top:5px;">NIP: ${member.nip}</p>
+        <div class="qr-code-display" style="margin-top:10px;">${member.qrCode}</div>`;
+    document.getElementById('qrcode').innerHTML = '';
+    new QRCode(document.getElementById('qrcode'), { text: member.qrCode, width: 256, height: 256, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H });
+    document.getElementById('viewQRModal').style.display = 'block';
+}
+function closeViewQRModal() { document.getElementById('viewQRModal').style.display = 'none'; currentQRMember = null; }
+
+function downloadQR() {
+    if (!currentQRMember) return;
+    const canvas = document.querySelector('#qrcode canvas');
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `QR_${currentQRMember.name.replace(/\s+/g,'_')}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+}
+
+function printSingleKKKSCard() {
+    if (!currentQRMember) return;
+    const member = currentQRMember;
+    const canvas = document.querySelector('#qrcode canvas');
+    if (!canvas) { customAlert('QR Code belum ter-generate!'); return; }
+    const qrDataURL = canvas.toDataURL();
+    const today = new Date();
+    const tanggalCetak = today.toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+    const logoHTML = kkksLogo ? `<img src="${kkksLogo}" style="width:100%;height:100%;object-fit:contain;">` : '<span style="font-size:10px;color:#999;">LOGO</span>';
+    const pw = window.open('', '', 'width=400,height=300');
+    pw.document.write(`<!DOCTYPE html><html><head><title>Kartu KKKS - ${member.name}</title><style>
+        *{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:white;padding:20px;}
+        .member-card-atm{width:3.375in;height:2.125in;background:linear-gradient(135deg,#ef4444 0%,#f59e0b 100%);border-radius:12px;padding:20px;color:white;position:relative;margin:0 auto;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+        .card-header-section{display:flex;align-items:center;gap:15px;margin-bottom:10px;}
+        .card-logo{width:60px;height:60px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
+        .card-title-main{font-size:10px;font-weight:600;line-height:1.2;margin-bottom:2px;}
+        .card-title-sub{font-size:13px;font-weight:700;line-height:1.2;margin-bottom:2px;}
+        .card-title-location{font-size:9px;font-weight:500;opacity:0.9;}
+        .card-content-section{display:flex;justify-content:space-between;align-items:flex-start;margin-top:5px;}
+        .card-member-name{font-size:16px;font-weight:700;margin-bottom:3px;}
+        .card-school{font-size:9px;opacity:0.9;margin-bottom:2px;}
+        .card-nip{font-size:8px;opacity:0.85;margin-bottom:8px;}
+        .card-issue-info{font-size:7px;opacity:0.8;line-height:1.4;}
+        .card-qr{width:100px;height:100px;background:white;padding:5px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-top:-5px;}
+        .card-qr img{max-width:100%;max-height:100%;}
+        .card-footer{position:absolute;bottom:10px;left:20px;font-size:8px;opacity:0.7;}
+        .card-authority{font-size:7px;font-weight:600;margin-top:5px;}
+    </style></head><body>
+    <div class="member-card-atm">
+        <div class="card-header-section">
+            <div class="card-logo">${logoHTML}</div>
+            <div>
+                <div class="card-title-main">KELOMPOK KERJA KEPALA SEKOLAH</div>
+                <div class="card-title-sub">PANGERAN SUKMA ARYA NINGRAT</div>
+                <div class="card-title-location">Kecamatan Arut Selatan</div>
+            </div>
+        </div>
+        <div style="height:2px;background:rgba(255,255,255,0.3);margin:10px 0;"></div>
+        <div class="card-content-section">
+            <div>
+                <div class="card-member-name">${member.name}</div>
+                <div class="card-school">${member.school}</div>
+                <div class="card-nip">NIP: ${member.nip}</div>
+                <div class="card-issue-info">Dikeluarkan di Pangkalan Bun<br>Pada Tanggal : ${tanggalCetak}<br>Ketua KKKS,</div>
+            </div>
+            <div class="card-qr"><img src="${qrDataURL}" alt="QR"></div>
+        </div>
+        <div class="card-authority">REPANI, S.Pd.SD.</div>
+        <div class="card-footer">© ${today.getFullYear()} PANGERAN SUKMA ARYA NINGRAT</div>
+    </div>
+    <script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`);
+    pw.document.close();
+}
+
+async function regenerateAllQR() {
+    if (!await customConfirm('Regenerate semua QR Code?')) return;
+    members.forEach(m => { m.qrCode = `KKKS-${m.nip}-1768888648852`; });
+    saveToLocalStorage();
+    renderMembers();
+    showMessage('✅ Semua QR Code berhasil diregenerate!', 'success');
+}
+
+// ============================================
+// ATTENDANCE
+// ============================================
+function renderTodayAttendance() {
+    const container = document.getElementById('todayAttendance');
+    const today = new Date().toDateString();
+    const todayRecords = attendance.filter(a => new Date(a.date).toDateString() === today).sort((a,b) => new Date(b.date)-new Date(a.date));
+    if (todayRecords.length === 0) { container.innerHTML = '<p style="text-align:center;color:#9ca3af;padding:20px;">Belum ada kehadiran hari ini</p>'; return; }
+    container.innerHTML = todayRecords.map((record, i) => {
+        const time = new Date(record.date).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+        return `<div class="attendance-item">
+            <div class="attendance-info">
+                <h4>${i+1}. ${record.memberName}</h4>
+                <p>🏫 ${record.school}</p>
+                <p>⏰ ${time}</p>
+                ${record.note ? `<p style="font-size:12px;">📝 ${record.note}</p>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-warning" onclick="openEditAttendanceModal('${record.id}')">✏️</button>
+                <button class="btn btn-danger" onclick="deleteAttendance('${record.id}')">🗑️</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderAttendanceTable() {
+    const tbody = document.getElementById('attendanceTableBody');
+    const monthFilter = document.getElementById('monthFilter').value;
+    let filtered = [...attendance];
+    if (monthFilter) filtered = filtered.filter(a => a.month === monthFilter);
+    filtered.sort((a,b) => new Date(b.date)-new Date(a.date));
+    if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9ca3af;">Tidak ada data</td></tr>'; return; }
+    tbody.innerHTML = filtered.map((record, i) => {
+        const date = new Date(record.date).toLocaleString('id-ID', { dateStyle:'medium', timeStyle:'short' });
+        const status = record.status || 'HADIR';
+        const statusClass = status === 'HADIR' ? 'hadir' : 'tidak-hadir';
+        return `<tr>
+            <td>${i+1}</td><td>${record.memberName}</td><td>${record.school}</td>
+            <td>${date}${record.note ? `<br><small style="color:#6b7280;">📝 ${record.note}</small>` : ''}</td>
+            <td><span class="status-badge ${statusClass}" onclick="toggleAttendanceStatus('${record.id}')">${status === 'HADIR' ? 'HADIR' : 'TIDAK HADIR'}</span></td>
+            <td>
+                <button class="btn btn-warning" onclick="openEditAttendanceModal('${record.id}')">✏️</button>
+                <button class="btn btn-danger" onclick="deleteAttendance('${record.id}')">🗑️</button>
+            </td>
+        </tr>`;
+    }).join('');
+    updateAttendanceStats();
+}
+
+function openEditAttendanceModal(attendanceId) {
+    const record = attendance.find(a => a.id === attendanceId);
+    if (!record) return;
+    document.getElementById('editAttendanceId').value = record.id;
+    document.getElementById('editAttendanceName').value = record.memberName;
+    const date = new Date(record.date);
+    document.getElementById('editAttendanceDate').value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById('editAttendanceNote').value = record.note || '';
+    document.getElementById('editAttendanceModal').style.display = 'block';
+}
+function closeEditAttendanceModal() { document.getElementById('editAttendanceModal').style.display = 'none'; }
+
+function updateAttendance() {
+    const id = document.getElementById('editAttendanceId').value;
+    const dateValue = document.getElementById('editAttendanceDate').value;
+    const note = document.getElementById('editAttendanceNote').value.trim();
+    if (!dateValue) { customAlert('Tanggal harus diisi!'); return; }
+    const idx = attendance.findIndex(a => a.id === id);
+    if (idx === -1) return;
+    const newDate = new Date(dateValue).toISOString();
+    attendance[idx].date = newDate;
+    attendance[idx].month = new Date(newDate).toLocaleString('id-ID', { month:'long', year:'numeric' });
+    attendance[idx].note = note;
+    saveToLocalStorage();
+    closeEditAttendanceModal();
+    renderAttendanceTable();
+    renderTodayAttendance();
+    if (currentMemberDetail) viewMemberDetail(currentMemberDetail.id);
+    showMessage('✅ Data kehadiran berhasil diupdate!', 'success');
+}
+
+async function deleteAttendance(attendanceId) {
+    if (!await customConfirm('Hapus data kehadiran ini?')) return;
+    attendance = attendance.filter(a => a.id !== attendanceId);
+    saveToLocalStorage();
+    renderAttendanceTable();
+    renderTodayAttendance();
+    renderMembers();
+    showMessage('✅ Data kehadiran berhasil dihapus!', 'success');
+}
+
+function toggleAttendanceStatus(attendanceId) {
+    const record = attendance.find(a => a.id === attendanceId);
+    if (!record) return;
+    record.status = (record.status || 'HADIR') === 'HADIR' ? 'TIDAK HADIR' : 'HADIR';
+    saveToLocalStorage();
+    renderAttendanceTable();
+    renderTodayAttendance();
+    loadDatabaseByMonth();
+    showMessage(`✅ Status diubah menjadi: ${record.status}`, 'success');
+}
+
+function createAttendanceForMember(memberId, month) {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return;
+    attendance.push({ id: generateId(), memberId: member.id, memberName: member.name, school: member.school, date: new Date().toISOString(), month, note: 'Ditambahkan manual', status: 'HADIR' });
+    saveToLocalStorage();
+    loadDatabaseByMonth();
+    renderAttendanceTable();
+    renderTodayAttendance();
+    showMessage(`✅ ${member.name} ditandai hadir`, 'success');
+}
+
+function populateMonthFilter() {
+    const months = [...new Set(attendance.map(a => a.month))].sort((a,b) => new Date(b)-new Date(a));
+    ['monthFilter','rekapMonthFilter','databaseMonthFilter'].forEach((id, i) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const firstOpt = i === 2 ? '<option value="">-- Pilih Bulan --</option>' : (i === 0 ? '<option value="">Semua Bulan</option>' : '<option value="">Semua Periode</option>');
+        sel.innerHTML = firstOpt;
+        months.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); });
+    });
+    const currentMonth = new Date().toLocaleString('id-ID', { month:'long', year:'numeric' });
+    const rSel = document.getElementById('rekapMonthFilter');
+    if (rSel && months.includes(currentMonth)) rSel.value = currentMonth;
+}
+
+function updateAttendanceStats() {
+    const currentMonth = new Date().toLocaleString('id-ID', { month:'long', year:'numeric' });
+    const today = new Date().toDateString();
+    document.getElementById('totalAttendances').textContent = attendance.length;
+    document.getElementById('thisMonthAttendances').textContent = attendance.filter(a => a.month === currentMonth).length;
+    document.getElementById('todayAttendances').textContent = attendance.filter(a => new Date(a.date).toDateString() === today).length;
+}
+
+// ============================================
+// PORTFOLIO PRINT
+// ============================================
+function previewPortfolio() {
+    if (!currentMemberDetail) { customAlert('Tidak ada anggota yang dipilih!'); return; }
+    const mAtt = attendance.filter(a => a.memberId === currentMemberDetail.id).sort((a,b) => new Date(b.date)-new Date(a.date));
+    document.getElementById('portfolioPreviewContent').innerHTML = generatePortfolioHTML(currentMemberDetail, mAtt);
+    document.getElementById('previewPortfolioModal').style.display = 'block';
+}
+function closePreviewPortfolioModal() { document.getElementById('previewPortfolioModal').style.display = 'none'; }
+
+function cetakPortfolio() {
+    if (!currentMemberDetail) { customAlert('Tidak ada anggota yang dipilih!'); return; }
+    const mAtt = attendance.filter(a => a.memberId === currentMemberDetail.id).sort((a,b) => new Date(b.date)-new Date(a.date));
+    const content = generatePortfolioHTML(currentMemberDetail, mAtt);
+    const pw = window.open('', '', 'width=800,height=600');
+    pw.document.write(`<!DOCTYPE html><html><head><title>Portfolio - ${currentMemberDetail.name}</title><style>
+        body{font-family:Arial,sans-serif;margin:0;padding:20mm;}table{width:100%;border-collapse:collapse;}
+        th,td{padding:12px;text-align:left;border:1px solid #e5e7eb;}th{background:#f9fafb;font-weight:600;}
+        .info-grid{display:grid;grid-template-columns:150px 1fr;gap:10px;}.info-label{font-weight:600;}
+    </style></head><body>${content}</body></html>`);
+    pw.document.close();
+    setTimeout(() => { pw.print(); pw.close(); }, 500);
+}
+
+function generatePortfolioHTML(member, memberAttendance) {
+    const now = new Date().toLocaleString('id-ID', { dateStyle:'full', timeStyle:'short' });
+    const rows = memberAttendance.length === 0 ? '<tr><td colspan="3" style="text-align:center;color:#9ca3af;">Belum ada kehadiran</td></tr>' :
+        memberAttendance.map((r, i) => `<tr><td>${i+1}</td><td>${new Date(r.date).toLocaleString('id-ID',{dateStyle:'full',timeStyle:'short'})}</td><td>${r.note||'-'}</td></tr>`).join('');
+    return `<div class="print-preview">
+        <div class="print-header"><h1>📋 PORTFOLIO KEHADIRAN</h1><p>Sistem Absensi KKKS</p><p>Dicetak: ${now}</p></div>
+        <div class="print-section"><h2>Data Anggota</h2>
+            <div class="info-grid">
+                <div class="info-label">Nama:</div><div>${member.name}</div>
+                <div class="info-label">Sekolah:</div><div>${member.school}</div>
+                <div class="info-label">NIP:</div><div>${member.nip}</div>
+                <div class="info-label">QR Code:</div><div>${member.qrCode}</div>
+            </div></div>
+        <div class="print-section"><h2>Statistik</h2>
+            <div class="info-grid">
+                <div class="info-label">Total Kehadiran:</div><div><strong>${memberAttendance.length} kali</strong></div>
+            </div></div>
+        <div class="print-section"><h2>Riwayat Kehadiran</h2>
+            <table><thead><tr><th>No</th><th>Tanggal & Waktu</th><th>Catatan</th></tr></thead><tbody>${rows}</tbody></table>
+        </div></div>`;
+}
+
+// ============================================
+// DATABASE FUNCTIONS
+// ============================================
+let currentDatabaseMonth = null;
+
+function loadDatabaseByMonth() {
+    const selectedMonth = document.getElementById('databaseMonthFilter').value;
+    if (!selectedMonth) {
+        document.getElementById('databaseContent').style.display = 'none';
+        document.getElementById('databaseEmpty').style.display = 'block';
+        return;
+    }
+    currentDatabaseMonth = selectedMonth;
+    const filteredAttendance = attendance.filter(a => a.month === selectedMonth);
+    const attendedIds = [...new Set(filteredAttendance.map(a => a.memberId))];
+    document.getElementById('dbTotalMembers').textContent = members.length;
+    document.getElementById('dbTotalHadir').textContent = attendedIds.length;
+    document.getElementById('dbTotalTidakHadir').textContent = members.length - attendedIds.length;
+    document.getElementById('dbTotalAttendances').textContent = filteredAttendance.length;
+
+    const memberAttMap = {};
+    members.forEach(m => { memberAttMap[m.id] = filteredAttendance.filter(a => a.memberId === m.id); });
+    const sorted = [...members].sort((a,b) => {
+        const ah = memberAttMap[a.id].length > 0, bh = memberAttMap[b.id].length > 0;
+        if (ah && !bh) return -1; if (!ah && bh) return 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    let html = '', row = 1;
+    sorted.forEach(member => {
+        const atts = memberAttMap[member.id];
+        if (atts.length > 0) {
+            atts.forEach(record => {
+                const date = new Date(record.date).toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                const status = record.status || 'HADIR';
+                html += `<tr>
+                    <td style="text-align:center;">${row}</td>
+                    <td>${date}</td><td>${member.name}</td><td>${member.nip}</td><td>${member.school}</td>
+                    <td style="text-align:center;"><span class="status-badge ${status==='HADIR'?'hadir':'tidak-hadir'}" onclick="toggleAttendanceStatus('${record.id}')">${status}</span></td>
+                </tr>`;
+                row++;
+            });
+        } else {
+            html += `<tr>
+                <td style="text-align:center;">${row}</td>
+                <td style="text-align:center;">-</td><td>${member.name}</td><td>${member.nip}</td><td>${member.school}</td>
+                <td style="text-align:center;"><span class="status-badge tidak-hadir" onclick="createAttendanceForMember('${member.id}','${selectedMonth}')">TIDAK HADIR</span></td>
+            </tr>`;
+            row++;
+        }
+    });
+    document.getElementById('databaseTableBody').innerHTML = html || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#9ca3af;">Tidak ada data</td></tr>';
+    document.getElementById('databaseContent').style.display = 'block';
+    document.getElementById('databaseEmpty').style.display = 'none';
+}
+
+function previewDatabaseLaporan() {
+    if (!currentDatabaseMonth) { customAlert('Pilih bulan terlebih dahulu!'); return; }
+    document.getElementById('rekapPreviewContent').innerHTML = generateDatabaseLaporanHTML(currentDatabaseMonth);
+    document.getElementById('previewRekapModal').style.display = 'block';
+}
+
+function cetakDatabaseLaporan() {
+    if (!currentDatabaseMonth) { customAlert('Pilih bulan terlebih dahulu!'); return; }
+    printLaporan(currentDatabaseMonth);
+}
+
+function exportDatabaseToExcel() {
+    if (!currentDatabaseMonth) { customAlert('Pilih bulan terlebih dahulu!'); return; }
+    const filteredAttendance = attendance.filter(a => a.month === currentDatabaseMonth);
+    const memberAttMap = {};
+    members.forEach(m => { memberAttMap[m.id] = filteredAttendance.filter(a => a.memberId === m.id); });
+    const sorted = [...members].sort((a,b) => {
+        const ah = memberAttMap[a.id].length > 0, bh = memberAttMap[b.id].length > 0;
+        if (ah && !bh) return -1; if (!ah && bh) return 1; return a.name.localeCompare(b.name);
+    });
+    const wb = XLSX.utils.book_new();
+    const data = [
+        ['DAFTAR KEHADIRAN KEPALA SEKOLAH'], ['SISTEM ABSENSI KKKS'], [],
+        ['Periode', currentDatabaseMonth], ['Total Anggota', members.length], [],
+        ['No', 'Tanggal/Waktu', 'Nama', 'NIP', 'Sekolah', 'Keterangan']
+    ];
+    let row = 1;
+    sorted.forEach(m => {
+        const atts = memberAttMap[m.id];
+        if (atts.length > 0) {
+            atts.forEach(r => {
+                const date = new Date(r.date).toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                data.push([row++, date, m.name, m.nip, m.school, r.status || 'HADIR']);
+            });
+        } else {
+            data.push([row++, '-', m.name, m.nip, m.school, 'TIDAK HADIR']);
+        }
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{wch:5},{wch:18},{wch:30},{wch:18},{wch:35},{wch:15}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Kehadiran');
+    XLSX.writeFile(wb, `Laporan_Kehadiran_${currentDatabaseMonth.replace(/\s+/g,'_')}.xlsx`);
+    showMessage('✅ Laporan berhasil diexport ke Excel!', 'success');
+}
+
+function generateDatabaseLaporanHTML(monthFilter) {
+    const printDate = new Date().toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+    const filteredAttendance = attendance.filter(a => a.month === monthFilter);
+    const attendedIds = [...new Set(filteredAttendance.map(a => a.memberId))];
+    const memberAttMap = {};
+    members.forEach(m => { memberAttMap[m.id] = filteredAttendance.filter(a => a.memberId === m.id); });
+    const sorted = [...members].sort((a,b) => {
+        const ah = memberAttMap[a.id].length > 0, bh = memberAttMap[b.id].length > 0;
+        if (ah && !bh) return -1; if (!ah && bh) return 1; return a.name.localeCompare(b.name);
+    });
+    let memberRows = '', row = 1;
+    sorted.forEach(m => {
+        const atts = memberAttMap[m.id];
+        if (atts.length > 0) {
+            atts.forEach(r => {
+                const date = new Date(r.date).toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                memberRows += `<tr><td style="text-align:center;">${row}</td><td>${date}</td><td>${m.name}</td><td>${m.nip}</td><td>${m.school}</td><td style="text-align:center;color:#059669;font-weight:bold;">HADIR</td></tr>`;
+                row++;
+            });
+        } else {
+            memberRows += `<tr><td style="text-align:center;">${row}</td><td style="text-align:center;">-</td><td>${m.name}</td><td>${m.nip}</td><td>${m.school}</td><td style="text-align:center;color:#dc2626;font-weight:bold;">TIDAK HADIR</td></tr>`;
+            row++;
+        }
+    });
+    return `<div class="print-preview">
+        <div class="print-header" style="text-align:center;margin-bottom:30px;border-bottom:3px solid #1e40af;padding-bottom:20px;">
+            <h1 style="font-size:18px;font-weight:bold;margin-bottom:5px;">DAFTAR KEHADIRAN KEPALA SEKOLAH</h1>
+            <h2 style="font-size:16px;font-weight:bold;margin-bottom:15px;">SISTEM ABSENSI KKKS KECAMATAN ARUT SELATAN</h2>
+        </div>
+        <div style="margin-bottom:25px;line-height:1.8;">
+            <table style="border:none;width:100%;margin-bottom:20px;">
+                <tr style="border:none;"><td style="border:none;width:200px;padding:4px 0;"><strong>Periode</strong></td><td style="border:none;padding:4px 0;">: ${monthFilter}</td></tr>
+                <tr style="border:none;"><td style="border:none;padding:4px 0;"><strong>Total Anggota</strong></td><td style="border:none;padding:4px 0;">: ${members.length} orang</td></tr>
+                <tr style="border:none;"><td style="border:none;padding:4px 0;"><strong>Total Kehadiran</strong></td><td style="border:none;padding:4px 0;">: ${attendedIds.length} orang</td></tr>
+                <tr style="border:none;"><td style="border:none;padding:4px 0;"><strong>Tidak Hadir</strong></td><td style="border:none;padding:4px 0;">: ${members.length - attendedIds.length} orang</td></tr>
+            </table>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f3f4f6;">
+                <th style="border:1px solid #000;padding:10px;text-align:center;width:40px;">No</th>
+                <th style="border:1px solid #000;padding:10px;width:140px;">Tanggal/Waktu</th>
+                <th style="border:1px solid #000;padding:10px;">Nama</th>
+                <th style="border:1px solid #000;padding:10px;width:120px;">NIP</th>
+                <th style="border:1px solid #000;padding:10px;">Sekolah</th>
+                <th style="border:1px solid #000;padding:10px;text-align:center;width:120px;">Keterangan</th>
+            </tr></thead>
+            <tbody>${memberRows || '<tr><td colspan="6" style="text-align:center;padding:20px;border:1px solid #000;">Tidak ada data</td></tr>'}</tbody>
+        </table>
+        <div style="margin-top:60px;">
+            <table style="width:100%;border:none;">
+                <tr style="border:none;">
+                    <td style="border:none;width:50%;text-align:center;vertical-align:top;">
+                        <div style="margin-bottom:80px;"><p>Pangkalan Bun, ${printDate}</p><p style="font-weight:bold;">Ketua KKKS</p></div>
+                        <p style="font-weight:bold;text-decoration:underline;">REPANI, S.Pd.SD.</p>
+                    </td>
+                    <td style="border:none;width:50%;text-align:center;vertical-align:top;">
+                        <div style="margin-bottom:80px;"><p>&nbsp;</p><p style="font-weight:bold;">Sekretaris</p></div>
+                        <p style="font-weight:bold;text-decoration:underline;">SETIA TUKUL SARWONO, S.Pd.SD.</p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>`;
+}
+
+function printLaporan(month) {
+    const content = generateDatabaseLaporanHTML(month);
+    const pw = window.open('', '', 'width=800,height=600');
+    pw.document.write(`<!DOCTYPE html><html><head><title>Laporan - ${month}</title><style>
+        body{font-family:Arial,sans-serif;margin:0;padding:20mm;font-size:12pt;}
+        table{width:100%;border-collapse:collapse;}th,td{padding:8px;text-align:left;border:1px solid #000;}
+        th{background:#f9fafb;font-weight:600;}h1{font-size:14pt;text-align:center;}h2{font-size:12pt;text-align:center;}
+    </style></head><body>${content}</body></html>`);
+    pw.document.close();
+    setTimeout(() => { pw.print(); pw.close(); }, 500);
+}
+
+// ============================================
+// REKAP FUNCTIONS
+// ============================================
+function previewRekapKehadiran() {
+    const month = document.getElementById('rekapMonthFilter').value;
+    if (!month) { customAlert('Pilih periode bulan terlebih dahulu!'); return; }
+    document.getElementById('rekapPreviewContent').innerHTML = generateDatabaseLaporanHTML(month);
+    document.getElementById('previewRekapModal').style.display = 'block';
+}
+function closePreviewRekapModal() { document.getElementById('previewRekapModal').style.display = 'none'; }
+
+function cetakRekapKehadiran() {
+    const month = document.getElementById('rekapMonthFilter').value;
+    if (!month) { customAlert('Pilih periode bulan terlebih dahulu!'); return; }
+    printLaporan(month);
+}
+
+// ============================================
+// EXPORT FUNCTIONS
+// ============================================
+function exportToExcel() {
+    const wb = XLSX.utils.book_new();
+    const membersData = [['ID','Nama','Sekolah','NIP','QR Code','Total Kehadiran'],
+        ...members.map(m => [m.id, m.name, m.school, m.nip, m.qrCode, attendance.filter(a => a.memberId===m.id).length])];
+    const wsM = XLSX.utils.aoa_to_sheet(membersData);
+    XLSX.utils.book_append_sheet(wb, wsM, 'Anggota');
+    const attData = [['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan'],
+        ...attendance.map(a => [a.id, a.memberId, a.memberName, a.school, new Date(a.date).toLocaleString('id-ID'), a.month, a.note||''])];
+    const wsA = XLSX.utils.aoa_to_sheet(attData);
+    XLSX.utils.book_append_sheet(wb, wsA, 'Kehadiran');
+    XLSX.writeFile(wb, `Database_KKKS_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showMessage('✅ Data berhasil diexport ke Excel!', 'success');
+}
+
+function exportToJSON() {
+    const data = { members, attendance, exportDate: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Backup_KKKS_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    showMessage('✅ Backup berhasil dibuat!', 'success');
+}
+
+function downloadQRCodes() {
+    if (members.length === 0) { customAlert('Tidak ada anggota untuk dicetak!'); return; }
+    printAllKKKSCards();
+}
+
+function printAllKKKSCards() {
+    if (members.length === 0) { customAlert('Tidak ada anggota!'); return; }
+    const qrPromises = members.map(member => new Promise(resolve => {
+        const qrC = document.createElement('div');
+        qrC.style.display = 'none';
+        document.body.appendChild(qrC);
+        new QRCode(qrC, { text: member.qrCode, width: 256, height: 256, colorDark:"#000000", colorLight:"#ffffff", correctLevel: QRCode.CorrectLevel.H });
+        setTimeout(() => {
+            const canvas = qrC.querySelector('canvas');
+            const qrDataURL = canvas ? canvas.toDataURL() : '';
+            document.body.removeChild(qrC);
+            resolve({ member, qrDataURL });
+        }, 100);
+    }));
+    Promise.all(qrPromises).then(results => {
+        const pw = window.open('', '', 'width=1200,height=800');
+        const today = new Date();
+        const tanggalCetak = today.toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' });
+        let cardsHTML = results.map(({ member, qrDataURL }) => `
+            <div class="kkks-card" style="page-break-after:always;">
+                <div class="card-header">
+                    <div class="logo-section"><div class="logo-placeholder">
+                        <svg width="80" height="80" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="white" stroke="#FFD700" stroke-width="3"/>
+                        <text x="50" y="55" text-anchor="middle" font-size="24" font-weight="bold" fill="#C41E3A">KKKS</text></svg>
+                    </div></div>
+                    <div class="header-text"><h2>KELOMPOK KERJA KEPALA SEKOLAH</h2><h1>PANGERAN SUKMA ARYA NINGRAT</h1>
+                    <p>Kec. Arut Selatan, Kab. Kotawaringin Barat, Prov. Kalimantan Tengah</p></div>
+                </div>
+                <div class="card-body">
+                    <h3 class="card-title">KARTU ANGGOTA KKKS</h3>
+                    <div class="card-content">
+                        <div class="member-info">
+                            <h2 class="member-name">${member.name}</h2>
+                            <p class="member-school">${member.school}</p>
+                            <p class="member-nip">NIP: ${member.nip}</p>
+                            <div class="issue-info"><p>Dikeluarkan di Pangkalan Bun</p><p>Pada Tanggal : ${tanggalCetak}</p><p>Ketua KKKS,</p></div>
+                            <div class="signature"><p class="signature-name">REPANI, S.Pd.SD.</p></div>
+                        </div>
+                        <div class="qr-section"><img src="${qrDataURL}" alt="QR Code" class="qr-image"></div>
+                    </div>
+                </div>
+                <div class="card-footer"><p>© ${today.getFullYear()} PANGERAN SUKMA ARYA NINGRAT</p></div>
+            </div>`).join('');
+        pw.document.write(`<!DOCTYPE html><html><head><title>Kartu Anggota KKKS</title><style>
+            *{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:#f0f0f0;padding:20px;}
+            .kkks-card{width:1000px;margin:0 auto 40px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+            .card-header{background:#C41E3A;color:white;padding:30px 40px;display:flex;align-items:center;gap:25px;border-bottom:5px solid #FFD700;}
+            .logo-placeholder{width:90px;height:90px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #FFD700;}
+            .header-text h2{font-size:16px;font-weight:600;margin-bottom:5px;}.header-text h1{font-size:28px;font-weight:700;margin-bottom:8px;}.header-text p{font-size:14px;opacity:0.95;}
+            .card-body{padding:40px;}.card-title{text-align:center;font-size:32px;font-weight:700;color:#1a5f3f;margin-bottom:35px;}
+            .card-content{display:flex;gap:60px;align-items:flex-start;}.member-info{flex:1;}
+            .member-name{font-size:28px;font-weight:700;color:#1f2937;margin-bottom:10px;}.member-school{font-size:18px;color:#4b5563;margin-bottom:8px;}.member-nip{font-size:16px;color:#6b7280;margin-bottom:30px;}
+            .issue-info{margin-top:25px;padding-top:20px;border-top:1px solid #e5e7eb;}.issue-info p{font-size:15px;color:#374151;margin-bottom:5px;}
+            .signature{margin-top:60px;}.signature-name{font-size:16px;font-weight:700;color:#1f2937;text-decoration:underline;}
+            .qr-section{flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:20px;border:3px solid #C41E3A;border-radius:12px;}
+            .qr-image{width:260px;height:260px;border:5px solid #1f2937;border-radius:8px;}
+            .card-footer{background:#f3f4f6;text-align:center;padding:15px;color:#6b7280;font-size:13px;}
+            @media print{body{background:white;padding:0;}.kkks-card{box-shadow:none;margin-bottom:0;}}
+        </style></head><body>${cardsHTML}<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script></body></html>`);
+        pw.document.close();
+    });
+}
+
+function importFromExcel(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(ws);
+            if (json.length === 0) { customAlert('File Excel kosong!'); return; }
+            if (!['Nama','Sekolah','NIP'].every(c => c in json[0])) { customAlert('Format Excel salah! Harus ada kolom: Nama, Sekolah, NIP'); return; }
+            let imported = 0;
+            json.forEach(row => {
+                if (row.Nama && row.Sekolah && row.NIP) {
+                    const nip = row.NIP.toString().trim();
+                    members.push({ id: generateId(), name: row.Nama.toString().trim(), school: row.Sekolah.toString().trim(), nip, qrCode: `KKKS-${nip}-1768888648852` });
+                    imported++;
+                }
+            });
+            saveToLocalStorage();
+            renderMembers();
+            showMessage(`✅ ${imported} anggota berhasil diimport!`, 'success');
+        } catch (err) { customAlert('❌ Gagal import Excel!'); }
+        event.target.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+async function importFromJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.members || !data.attendance) { customAlert('File JSON tidak valid!'); return; }
+            if (!await customConfirm(`Restore data?\n\nAnggota: ${data.members.length}\nKehadiran: ${data.attendance.length}\n\n⚠️ Data saat ini akan ditimpa!`)) return;
+            members = data.members;
+            attendance = data.attendance;
+            saveToLocalStorage();
+            renderMembers();
+            renderAttendanceTable();
+            renderTodayAttendance();
+            populateMonthFilter();
+            showMessage('✅ Data berhasil direstore!', 'success');
+        } catch (err) { customAlert('❌ Gagal restore backup!'); }
+        event.target.value = '';
+    };
+    reader.readAsText(file);
+}
+
+function downloadTemplateExcel() {
+    const wb = XLSX.utils.book_new();
+    const data = [['Nama','Sekolah','NIP'],['John Doe','SMA Negeri 1 Jakarta','123456789'],['Jane Smith','SMA Negeri 2 Jakarta','987654321']];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{wch:30},{wch:35},{wch:20}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'Template_Import_Anggota.xlsx');
+}
+
+async function clearAllData() {
+    if (!await customConfirm('⚠️ Ini akan menghapus SEMUA data!\n\nData tidak bisa dikembalikan. Lanjutkan?')) return;
+    const confirmText = await customPrompt('Ketik "HAPUS" untuk konfirmasi:');
+    if (confirmText !== 'HAPUS') { customAlert('Penghapusan dibatalkan.'); return; }
+    members = []; attendance = [];
+    localStorage.removeItem(STORAGE_KEYS.MEMBERS);
+    localStorage.removeItem(STORAGE_KEYS.ATTENDANCE);
+    renderMembers(); renderAttendanceTable(); renderTodayAttendance(); updateStats();
+    showMessage('✅ Semua data berhasil dihapus!', 'success');
+}
+
+function validateData() {
+    const issues = [];
+    const qrCounts = {};
+    members.forEach(m => { qrCounts[m.qrCode] = (qrCounts[m.qrCode]||0)+1; });
+    const dupQRs = Object.keys(qrCounts).filter(q => qrCounts[q] > 1);
+    if (dupQRs.length > 0) issues.push({ type:'error', title:'QR Code Duplikat', message:`${dupQRs.length} QR Code duplikat ditemukan.` });
+    const empty = members.filter(m => !m.name || !m.school || !m.nip);
+    if (empty.length > 0) issues.push({ type:'warning', title:'Data Kosong', message:`${empty.length} anggota memiliki field kosong` });
+    const orphaned = attendance.filter(a => !members.find(m => m.id === a.memberId));
+    if (orphaned.length > 0) issues.push({ type:'warning', title:'Kehadiran Tanpa Anggota', message:`${orphaned.length} kehadiran tidak punya anggota` });
+    const container = document.getElementById('validationResults');
+    if (issues.length === 0) {
+        container.innerHTML = `<div style="background:#dcfce7;border:2px solid #10b981;border-radius:8px;padding:15px;"><p style="color:#065f46;font-weight:bold;">✅ Data Valid - Tidak ada masalah ditemukan!</p></div>`;
+    } else {
+        container.innerHTML = issues.map(i => `<div style="background:${i.type==='error'?'#fee2e2':'#fef3c7'};border:2px solid ${i.type==='error'?'#ef4444':'#f59e0b'};border-radius:8px;padding:15px;margin-bottom:10px;">
+            <p style="color:${i.type==='error'?'#991b1b':'#92400e'};font-weight:bold;">${i.type==='error'?'❌':'⚠️'} ${i.title}</p>
+            <p style="color:${i.type==='error'?'#991b1b':'#92400e'};font-size:14px;">${i.message}</p></div>`).join('');
+    }
+    container.style.display = 'block';
+}
+
+// ============================================
+// UTILITIES
+// ============================================
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+function updateStats() {
+    document.getElementById('statMembers').textContent = members.length;
+    document.getElementById('statAttendance').textContent = attendance.length;
+}
+function showMessage(message, type) {
+    const mb = document.getElementById('messageBox');
+    mb.textContent = message;
+    mb.className = 'message-box ' + type + ' show';
+    setTimeout(() => mb.classList.remove('show'), 3000);
+}
+function showCustomNotification(title, message, type='info') {
+    document.querySelectorAll('.custom-notification').forEach(n => n.remove());
+    const n = document.createElement('div');
+    n.className = `custom-notification ${type}`;
+    n.innerHTML = `<div class="custom-notification-title">${title}</div><div class="custom-notification-message">${message}</div>`;
+    document.body.appendChild(n);
+    setTimeout(() => { n.style.animation = 'slideInRight 0.3s ease-out reverse'; setTimeout(() => n.remove(), 300); }, 4000);
+}
+
+function processManualQR() {
+    const input = document.getElementById('manualQrInput');
+    const qrCode = input.value.trim();
+    if (!qrCode) { customAlert('❌ Mohon masukkan kode QR!'); return; }
+    onScanSuccess(qrCode);
+    input.value = '';
+    input.focus();
+}
+
+function handleLogoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { customAlert('❌ File harus berupa gambar!'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        kkksLogo = e.target.result;
+        localStorage.setItem(STORAGE_KEYS.LOGO, kkksLogo);
+        displayLogoPreview();
+        showMessage('✅ Logo berhasil diupload!', 'success');
+    };
+    reader.readAsDataURL(file);
+}
+function displayLogoPreview() {
+    const preview = document.getElementById('logoPreview');
+    preview.innerHTML = kkksLogo ? `<img src="${kkksLogo}" alt="Logo KKKS" style="width:100%;height:100%;object-fit:contain;">` : '<span class="logo-preview-text">Belum ada logo</span>';
+}
+async function removeLogo() {
+    if (!await customConfirm('Hapus logo KKKS?')) return;
+    kkksLogo = null;
+    localStorage.removeItem(STORAGE_KEYS.LOGO);
+    displayLogoPreview();
+    showMessage('✅ Logo berhasil dihapus!', 'success');
+}
+function loadLogo() {
+    const saved = localStorage.getItem(STORAGE_KEYS.LOGO);
+    if (saved) { kkksLogo = saved; displayLogoPreview(); }
+}
+
+// ============================================
+// TAB SWITCHING
+// ============================================
+function switchTab(tabName, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabName + 'Tab').classList.remove('hidden');
+    if (btn) btn.classList.add('active');
+    else { const activeTab = document.querySelector(`.tab[onclick*="${tabName}"]`); if(activeTab) activeTab.classList.add('active'); }
+    if (tabName === 'scan') startAttendanceAutoRefresh();
+    else stopAttendanceAutoRefresh();
+    if (tabName === 'attendance') renderAttendanceTable();
+    if (tabName === 'database') populateMonthFilter();
+}
+
+function startAttendanceAutoRefresh() {
+    if (attendanceRefreshInterval) clearInterval(attendanceRefreshInterval);
+    attendanceRefreshInterval = setInterval(() => renderTodayAttendance(), 2000);
+}
+function stopAttendanceAutoRefresh() {
+    if (attendanceRefreshInterval) { clearInterval(attendanceRefreshInterval); attendanceRefreshInterval = null; }
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) event.target.style.display = 'none';
+};
+</script>
+</body>
+</html>
