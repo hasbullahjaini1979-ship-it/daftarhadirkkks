@@ -1198,7 +1198,7 @@ function loadLocal() {
   try {
     const m=localStorage.getItem(SK.M), a=localStorage.getItem(SK.A), s=localStorage.getItem(SK.S), u=localStorage.getItem(SK.U), l=localStorage.getItem(SK.L);
     if(m) members=JSON.parse(m);
-    if(a) attendance=JSON.parse(a);
+    if(a){ attendance=JSON.parse(a); attendance.forEach(r=>{r.month=normalizeMonth(r.month);}); }
     if(s) schedules=JSON.parse(s);
     if(u) gsUrl=u;
     if(l) kkksLogo=l;
@@ -1228,9 +1228,21 @@ async function fetchMembers() {
   const rows = await gsGet('Members');
   if(rows.length>1) members=rows.slice(1).map(r=>({id:r[0],name:r[1],school:r[2],nip:r[3],qrCode:r[4]})).filter(m=>m.id&&m.name);
 }
+function normalizeMonth(val){
+  if(!val) return '';
+  // Jika sudah berformat "Januari 2026" dll, kembalikan apa adanya
+  if(/^[A-Za-z]/.test(val.trim())) return val.trim();
+  // Jika berformat ISO / tanggal, konversi ke nama bulan Indonesia
+  const d = new Date(val);
+  if(!isNaN(d.getTime())){
+    return d.toLocaleString('id-ID',{month:'long',year:'numeric'});
+  }
+  return val;
+}
+
 async function fetchAttendance() {
   const rows = await gsGet('Attendance');
-  if(rows.length>1) attendance=rows.slice(1).map(r=>({id:r[0],memberId:r[1],memberName:r[2],school:r[3],date:r[4],month:r[5],note:r[6]||'',status:r[7]||'HADIR'})).filter(a=>a.id&&a.memberId);
+  if(rows.length>1) attendance=rows.slice(1).map(r=>({id:r[0],memberId:r[1],memberName:r[2],school:r[3],date:r[4],month:normalizeMonth(r[5]),note:r[6]||'',status:r[7]||'HADIR'})).filter(a=>a.id&&a.memberId);
 }
 async function fetchSchedules() {
   const rows = await gsGet('Schedules');
@@ -1780,7 +1792,17 @@ async function deleteAtt(id){
 }
 
 function populateMonthFilters(){
-  const months=[...new Set(attendance.map(a=>a.month))].sort((a,b)=>new Date(b)-new Date(a));
+  // Normalisasi semua nilai month terlebih dahulu
+  attendance.forEach(a=>{ a.month=normalizeMonth(a.month); });
+  const MONTHS_ORDER=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const months=[...new Set(attendance.map(a=>a.month))].filter(Boolean).sort((a,b)=>{
+    // Sort descending by year then month
+    const pa=a.split(' '),pb=b.split(' ');
+    const ya=parseInt(pa[pa.length-1])||0, yb=parseInt(pb[pb.length-1])||0;
+    if(yb!==ya) return yb-ya;
+    const ma=MONTHS_ORDER.indexOf(pa[0]), mb=MONTHS_ORDER.indexOf(pb[0]);
+    return mb-ma;
+  });
   ['monthFilter','dbMonthSel'].forEach(id=>{
     const sel=document.getElementById(id); if(!sel) return;
     const first=id==='monthFilter'?'<option value="">Semua Bulan</option>':'<option value="">-- Pilih Bulan --</option>';
