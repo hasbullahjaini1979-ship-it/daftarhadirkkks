@@ -1652,20 +1652,27 @@ function openMemberModal(id){
 }
 function closeMemberModal(){ document.getElementById('memberModal').classList.remove('show'); }
 
-function saveMember(){
+async function saveMember(){
   const id=document.getElementById('editMId').value;
   const name=document.getElementById('fName').value.trim(), school=document.getElementById('fSchool').value.trim();
   const nip=document.getElementById('fNIP').value.trim(); let qr=document.getElementById('fQR').value.trim();
   if(!name||!school||!nip){showToast('❌ Nama, Sekolah, NIP wajib!','error');return;}
   if(!qr) qr=`KKKS-${nip}-1768888648852`;
   if(members.some(m=>m.id!==id&&m.qrCode===qr)){showToast('❌ QR sudah digunakan!','error');return;}
+  const isEdit=!!id;
   if(id){
     const idx=members.findIndex(m=>m.id===id);
     members[idx]={...members[idx],name,school,nip,qrCode:qr};
     attendance.forEach(a=>{if(a.memberId===id){a.memberName=name;a.school=school;}});
-    showToast(`✅ ${name} diupdate!`,'success');
-  } else { members.push({id:genId(),name,school,nip,qrCode:qr}); showToast(`✅ ${name} ditambahkan!`,'success'); }
+  } else { members.push({id:genId(),name,school,nip,qrCode:qr}); }
   saveLocal(); closeMemberModal(); renderMembers(); renderDashboard();
+  showToast(`⏳ Menyimpan ke Google Sheets...`,'success');
+  try {
+    await gsPost({action:'save',sheet:'Members',rows:[['ID','Nama','Sekolah','NIP','QR Code'],...members.map(m=>[m.id,m.name,m.school,m.nip,m.qrCode])]});
+    if(!isEdit) await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected');
+    showToast(`✅ ${name} ${isEdit?'diupdate':'ditambahkan'} & terkirim ke Sheets!`,'success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Tersimpan lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 async function deleteMember(id){
@@ -1777,13 +1784,18 @@ function openAttEdit(id){
 }
 function closeAttModal(){ document.getElementById('editAttModal').classList.remove('show'); }
 
-function saveAttEdit(){
+async function saveAttEdit(){
   const id=document.getElementById('editAId').value, dv=document.getElementById('editADate').value, note=document.getElementById('editANote').value.trim();
   if(!dv){showToast('❌ Tanggal wajib!','error');return;}
   const idx=attendance.findIndex(a=>a.id===id); if(idx===-1) return;
   const nd=new Date(dv).toISOString();
   attendance[idx].date=nd; attendance[idx].month=new Date(nd).toLocaleString('id-ID',{month:'long',year:'numeric'}); attendance[idx].note=note;
-  saveLocal(); closeAttModal(); renderAttTable(); showToast('✅ Kehadiran diupdate!','success');
+  saveLocal(); closeAttModal(); renderAttTable();
+  showToast('⏳ Menyimpan ke Google Sheets...','success');
+  try {
+    await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected'); showToast('✅ Kehadiran diupdate & terkirim ke Sheets!','success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Tersimpan lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 async function deleteAtt(id){
@@ -1851,10 +1863,15 @@ function loadDatabase(){
     </table></div>`;
 }
 
-function addAtt(memberId,month){
+async function addAtt(memberId,month){
   const m=members.find(x=>x.id===memberId); if(!m) return;
   attendance.push({id:genId(),memberId:m.id,memberName:m.name,school:m.school,date:new Date().toISOString(),month,note:'Manual',status:'HADIR'});
-  saveLocal(); loadDatabase(); renderTodayAttendance(); showToast(`✅ ${m.name} ditandai hadir`,'success');
+  saveLocal(); loadDatabase(); renderTodayAttendance();
+  showToast(`⏳ Menyimpan ke Google Sheets...`,'success');
+  try {
+    await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected'); showToast(`✅ ${m.name} ditandai hadir & terkirim ke Sheets!`,'success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Tersimpan lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 function genLaporanHTML(month){
@@ -1959,14 +1976,19 @@ function openSchedModal(key,label){
 }
 function closeSchedModal(){ document.getElementById('schedModal').classList.remove('show'); editingSchedKey=null; }
 
-function saveSchedule(){
+async function saveSchedule(){
   const dt=document.getElementById('sDatetime').value, loc=document.getElementById('sLocation').value.trim(), note=document.getElementById('sNote').value.trim();
   const label=document.getElementById('schedKey').value; // key stored in hidden
   if(!dt||!loc){showToast('❌ Tanggal dan Tempat wajib!','error');return;}
   const key=editingSchedKey;
   schedules[key]={id:schedules[key]?.id||genId(),month:MONTHS_ID[parseInt(key.split('-')[1])-1]+' '+key.split('-')[0],datetime:new Date(dt).toISOString(),location:loc,note};
   saveLocal(); closeSchedModal(); renderSchedules(); evaluateSchedule();
-  showToast('✅ Jadwal disimpan!','success');
+  showToast('⏳ Menyimpan ke Google Sheets...','success');
+  try {
+    const sa=Object.values(schedules);
+    await gsPost({action:'save',sheet:'Schedules',rows:[['ID','Month','Datetime','Location','Note'],...sa.map(s=>[s.id,s.month,s.datetime,s.location,s.note||''])]});
+    updateGSBadge('connected'); showToast('✅ Jadwal disimpan & terkirim ke Sheets!','success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Tersimpan lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 function deleteSchedModal(){ if(!editingSchedKey) return; delete schedules[editingSchedKey]; saveLocal(); closeSchedModal(); renderSchedules(); evaluateSchedule(); showToast('✅ Jadwal dihapus!','success'); }
 async function deleteSchedKey(key){ const ok=await confirmDialog('Hapus jadwal ini?'); if(!ok) return; delete schedules[key]; saveLocal(); renderSchedules(); evaluateSchedule(); showToast('✅ Jadwal dihapus!','success'); }
