@@ -1833,10 +1833,15 @@ function renderAttTable(){
   }).join('');
 }
 
-function toggleStatus(id){
+async function toggleStatus(id){
   const r=attendance.find(a=>a.id===id); if(!r) return;
   r.status=(r.status||'HADIR')==='HADIR'?'TIDAK HADIR':'HADIR';
   saveLocal(); renderAttTable(); loadDatabase();
+  showToast(`⏳ Mengubah status ke ${r.status}...`,'success');
+  try {
+    await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected'); showToast(`✅ Status diubah ke ${r.status} & terkirim ke Sheets!`,'success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Status diubah lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 function openAttEdit(id){
