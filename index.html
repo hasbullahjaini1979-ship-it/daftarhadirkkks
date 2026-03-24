@@ -1737,7 +1737,13 @@ async function deleteMember(id){
   const m=members.find(x=>x.id===id); if(!m) return;
   const ok=await confirmDialog(`Hapus ${m.name}?\nSemua kehadiran ikut terhapus.`); if(!ok) return;
   members=members.filter(x=>x.id!==id); attendance=attendance.filter(a=>a.memberId!==id);
-  saveLocal(); renderMembers(); showToast(`✅ ${m.name} dihapus!`,'success');
+  saveLocal(); renderMembers(); renderDashboard();
+  showToast(`⏳ Menghapus & sinkronisasi ke Google Sheets...`,'success');
+  try {
+    await gsPost({action:'save',sheet:'Members',rows:[['ID','Nama','Sekolah','NIP','QR Code'],...members.map(m=>[m.id,m.name,m.school,m.nip,m.qrCode])]});
+    await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected'); showToast(`✅ ${m.name} dihapus & tersinkronisasi ke Sheets!`,'success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Dihapus lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 // ============================================
@@ -1858,7 +1864,12 @@ async function saveAttEdit(){
 
 async function deleteAtt(id){
   const ok=await confirmDialog('Hapus data kehadiran ini?'); if(!ok) return;
-  attendance=attendance.filter(a=>a.id!==id); saveLocal(); renderAttTable(); updateAttStats(); showToast('✅ Kehadiran dihapus!','success');
+  attendance=attendance.filter(a=>a.id!==id); saveLocal(); renderAttTable(); updateAttStats();
+  showToast('⏳ Menghapus & sinkronisasi ke Google Sheets...','success');
+  try {
+    await gsPost({action:'save',sheet:'Attendance',rows:[['ID','Member ID','Nama','Sekolah','Tanggal','Bulan','Catatan','Status'],...attendance.map(a=>[a.id,a.memberId,a.memberName,a.school,a.date,a.month,a.note||'',a.status||'HADIR'])]});
+    updateGSBadge('connected'); showToast('✅ Kehadiran dihapus & tersinkronisasi ke Sheets!','success');
+  } catch(e){ updateGSBadge('err'); showToast('⚠️ Dihapus lokal, gagal kirim ke Sheets: '+e.message,'error'); }
 }
 
 function populateMonthFilters(){
