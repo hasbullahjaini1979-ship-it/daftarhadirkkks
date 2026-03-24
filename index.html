@@ -475,7 +475,7 @@ body {
 .page-hdr {
   background:white;border-bottom:2px solid var(--border);
   padding:16px 24px;display:flex;align-items:center;gap:12px;
-  position:sticky;top:110px;z-index:100;
+  position:sticky;top:110px;z-index:50;
   box-shadow:0 2px 8px rgba(0,0,0,0.06);
 }
 .page-hdr h1 { font-family:'Sora',sans-serif;font-size:18px;font-weight:800;color:var(--black); }
@@ -715,6 +715,7 @@ tr:last-child td { border-bottom:none; }
         <div class="h-date" id="hDate">—</div>
       </div>
       <div class="h-actions">
+        <button id="notifBtn" class="btn-header outline" onclick="toggleNotif()" title="Aktifkan notifikasi scan masuk" style="display:none;">🔔 Notifikasi</button>
         <a href="https://www.kkksarutselatan.com/" class="btn-header gold" target="_blank">🌐 Website</a>
         <div id="gsBadge" class="gs-badge gs-err">⚫ Sheets</div>
       </div>
@@ -1189,6 +1190,7 @@ async function initApp() {
   populateYearSelect();
   document.getElementById('gsUrlInput').value = gsUrl;
   loadLogoPreview();
+  updateNotifBtn();
 }
 
 // ============================================
@@ -1307,13 +1309,69 @@ function saveGSConfig() {
 // ============================================
 // AUTO REFRESH
 // ============================================
+// ============================================
+// NOTIFIKASI BROWSER
+// ============================================
+function updateNotifBtn(){
+  const btn=document.getElementById('notifBtn');
+  if(!btn||!('Notification' in window)) return;
+  btn.style.display='inline-flex';
+  if(Notification.permission==='granted'){
+    btn.textContent='🔔 Notif ON'; btn.style.color='#4ade80';
+  } else if(Notification.permission==='denied'){
+    btn.textContent='🔕 Notif OFF'; btn.style.color='rgba(255,255,255,0.3)';
+  } else {
+    btn.textContent='🔔 Notifikasi'; btn.style.color='rgba(255,255,255,0.7)';
+  }
+}
+async function toggleNotif(){
+  if(!('Notification' in window)){showToast('Browser tidak mendukung notifikasi','error');return;}
+  if(Notification.permission==='granted'){
+    showToast('🔔 Notifikasi sudah aktif! Scan baru dari HP akan muncul di sini.','success');
+  } else if(Notification.permission==='denied'){
+    showToast('❌ Notifikasi diblokir browser. Buka Pengaturan > Situs > izinkan notifikasi.','error');
+  } else {
+    const result=await Notification.requestPermission();
+    if(result==='granted'){ showToast('✅ Notifikasi diaktifkan!','success'); }
+    else { showToast('⚠️ Notifikasi ditolak.','error'); }
+  }
+  updateNotifBtn();
+}
+function requestNotifPermission(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission==='default') Notification.requestPermission().then(()=>updateNotifBtn());
+  updateNotifBtn();
+}
+function showScanNotif(name, school){
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
+  const n=new Notification('📋 Scan Masuk!',{
+    body: name+'\n'+school,
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231a1a1a"/><text y="70" font-size="60" text-anchor="middle" x="50">✅</text></svg>',
+    tag: 'kkks-scan',
+    requireInteraction: false,
+    silent: false
+  });
+  setTimeout(()=>n.close(), 6000);
+}
+
 function startAutoRefresh() {
   if(refreshTimer) clearInterval(refreshTimer);
+  // Minta izin notifikasi saat pertama kali
+  requestNotifPermission();
   refreshTimer = setInterval(async ()=>{
     try {
+      // Simpan snapshot ID kehadiran sebelum fetch
+      const prevIds = new Set(attendance.map(a=>a.id));
       await fetchAttendance();
+      // Cari data baru yang belum ada sebelumnya
+      const newEntries = attendance.filter(a=>!prevIds.has(a.id));
       renderTodayAttendance();
       evaluateSchedule();
+      // Tampilkan notifikasi untuk setiap scan baru
+      newEntries.forEach(a=>{
+        showScanNotif(a.memberName, a.school);
+        showToast(`🔔 Scan baru: ${a.memberName}`,'success');
+      });
     } catch(e){}
   }, 10000);
 }
